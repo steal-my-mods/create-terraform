@@ -14,14 +14,64 @@ Minecraft 1.21.1, NeoForge 21.1.248, Create 6.0.11. Java 21. Mod id `createterra
 python3 tools/generate_textures.py    # every texture the mod ships
 python3 tools/generate_structures.py  # the GameTest structure template
 python3 tools/generate_logo.py        # the mod badge
+python3 tools/generate_models.py      # blockstate, casing models, partials, item model
+python3 tools/check_models.py         # block models: missing textures, holes in the block boundary
+python3 tools/preview_machine.py -o /tmp/rig.json   # the whole machine, mud included
+python3 tools/check_models.py /tmp                 # cross-partial z-fighting
+python3 tools/render_block_model.py /tmp/rig.json -o out.png --angle hero
 ```
+
+`render_block_model.py` is an orthographic renderer for a block model, and it is the difference
+between designing the casing and guessing at it — three versions of this block were authored blind
+and all three were wrong in ways one render would have caught. `--angle` takes `hero` and `profile`
+(judge anything that stands out of the front from these; head-on, an orthographic projection
+collapses a barrel into a square), `top` (straight down into the mud tank), `drive` and
+`back-quarter`, plus the generic `iso`/`front`/`quarter`/`high`/`side`.
+
+Always render **`preview_machine.py`'s output**, not a model from `assets/`. The casing alone is
+missing everything that moves; the item model has the moving parts but no mud. `preview_machine.py`
+adds the mud, and it applies the same up-to-facing swing the renderer applies at runtime — appending
+the gauge verbatim puts it inside the housing instead of the tank, and the render is then quietly
+wrong in exactly the place you were looking at.
 
 `run-gametest/eula.txt` must say `eula=true` before the test server will start; it is gitignored, so
 a fresh checkout needs it created once. CI does that itself.
 
 ## The frame
 
-**A late-game Deployer whose inventory is the world.** On a contraption that is exactly what it is:
+**A rotary core drill run backwards.** A core rig turns a chuck, circulates mud down the string and
+brings a cylinder of rock up; this one pushes one out. Plinth, housing, open mud tank on the deck
+above it; shaft in the back, chuck and barrel out the front. That is the shape the machine is built to,
+and it was chosen because it is the only one that explains all three of the machine's inputs at
+once — mud in the tank, rotation into the chuck, rock out of the barrel — and because it is what the
+code has always thought it was: `StrataSlice`, `sample`, `sampleY`, a "core sample queue".
+
+Six other shapes were mocked up and rendered before this one was picked (screw extruder, placing
+pump, vibroseis baseplate, transmutation array, pattern emitter, analytical caster). Do not redesign
+this block without doing the same — three earlier versions were authored blind and all three were
+wrong.
+
+**Three rules the shape must keep.**
+
+**Rotation and fluid meet at a mechanism, never in a volume.** Create
+never runs a shaft through a tank. The Mixer puts the shaft above and the basin below, the Press puts
+the shaft above and the ram below, the Steam Engine puts fluid below and takes the shaft out the
+side. A version of this block that ran the drive straight through the substrate was rejected for it, and
+that is what the deck is: wet above, dry below.
+
+**Brass means the barrel.** It is the one part that stands outside the cell and the one part a
+player reads the front off, so nothing else on the machine is brass — the chuck wrapped around it is
+steel for exactly this reason. A pass that quietly repointed the barrel at the slate palette made it
+vanish against the casing.
+
+**The drive is coaxial.** The shaft goes in the face behind the one the core comes out of, because
+the barrel turns about the facing and a barrel that spins about the facing wants its drive on the
+facing. It used to come in the side, Deployer-style, which was right while the business end was a
+punching ram and needed a bevel pair to explain itself once it became a turning barrel. That change
+took a blockstate property and six variants with it: six variants now, one casing model, no
+`axis_along_first`.
+
+Behaviourally it is still **a late-game Deployer whose inventory is the world.** On a contraption that is exactly what it is:
 same activation model, same one-placement-per-new-position, same behaviour at speed. When a question
 comes up about how the machine should *feel* — reach, disabling, what happens when it is driven fast
 — the answer is "whatever a Deployer does", and that is why the gap at speed is matched rather than
@@ -51,6 +101,8 @@ modes that are silent, expensive and easy to reintroduce.
 | `extruder/TerraformExtruderBlockEntity` | Standing still: core-sample queue, async double buffering, NBT. |
 | `extruder/ExtruderMovementBehaviour` | Moving: Create's `MovementBehaviour`, and the Seismic Shift. |
 | `extruder/ExtruderMountedStorage` | The machine's tank, mounted into a contraption's fluid pool. |
+| `client/TerraformExtruderRenderer` | Spindle and barrel, both on the facing. Phase is read off the world clock and the machine's speed, so nothing is synced for it. |
+| `client/TerraformPartials` | Barrel, spindle and gauge — all up-authored, because that is what Create's orientation transform expects. |
 
 ## Things that will bite
 
@@ -96,12 +148,99 @@ modes that are silent, expensive and easy to reintroduce.
   differently would be the odd one out on a machine built from Create's parts. Do not re-add it
   without deciding that again.
 
+## Known gaps
+
+- **`SyncedMountedStorage` is still not worth implementing.** The gauge exists now, but it is drawn
+  by the block entity renderer, and that does not run on a contraption — so there is still nothing
+  on the far side to keep truthful. It becomes worth doing the same day `renderInContraption` does.
+- **The barrel, spindle and gauge do not animate on a contraption.** `MovementBehaviour.renderInContraption` is not
+  implemented, so an assembled Extruder shows its casing with the head missing. Create's Drill does
+  this through a static `renderInContraption` plus a Flywheel `ActorVisual`; we have neither yet.
+  An assembled Extruder therefore shows its casing with an empty mud window and no moving parts.
+- **No Flywheel visual.** Without one Create never skips the block entity renderer, so the rig draws
+  on every backend — correct, just not instanced.
+
 ## Conventions
 
 - Tabs, Create's formatting idiom, and javadoc that says *why* rather than *what*.
 - Registries are plain NeoForge `DeferredRegister`, not Registrate — Create ships Registrate
   jar-in-jar and it is `compileOnly` here (see the comment in `build.gradle`).
 - Textures and the test structure are generated and diffed in CI. Do not hand-edit a PNG or the NBT.
+- `tools/check_models.py` gates block models: texture references, `#refs`, and boundary coverage.
+  Coverage is opt-in via `"__solid": true`, because a Create-style machine casing is deliberately
+  not a solid block — the Extruder is a twelve-pixel casing with an open mouth and sets
+  `noOcclusion()`. A solid model may still leave one face open if something opaque backs it, via
+  `"__backed": ["<face>"]`.
+- **Models are generated, not hand-authored.** `tools/generate_models.py` drops every face that is
+  buried inside another box, which is the only practical defence against z-fighting across a dozen
+  boxes — the shimmering checkerboard only shows up once the block is in the world. Do not hand-edit
+  a model under `models/block/terraform_extruder/`.
+- **The casing is a box with holes in it**, not a stack of slabs. A hole is the one thing a block
+  model cannot express, so every wall with something to look through is built by `frame()` in
+  `generate_models.py` — four boxes around a gap. Two holes, each the only one of its shape: a bore
+  through the back plate with the shaft stub and gear in it, and a wider bore through the front wall
+  the chuck spins on and the barrel runs through.
+- **The mud tank has no lid, deliberately.** An earlier version cut a slot in one, and the four frame
+  boxes each sampled a different crop of the same banded texture, which read as clutter from every
+  angle. An open basin is both cleaner and more Create — it is what the Basin and the Item Drain do.
+- **Clearances around the chuck and barrel are fractions of a pixel, deliberately.** The chuck sits
+  on the front wall and grips the barrel; landing on either plane exactly z-fights. Both drill
+  collars sit beyond the chuck even at rest and the barrel only ever travels further out, so neither
+  can be driven back through a hole it does not fit.
+- **A spinning part is only as small as its corners.** A square turning about its centre sweeps a
+  factor of root two further out than its flats, so its flats can sit well inside a hole while its
+  corners punch out through the casing and back four times a turn — which is invisible in a still
+  render and obvious the moment the shaft turns. `clears()` in `generate_models.py` asserts every
+  rotating part against every static hole it turns in, and it runs before anything is written. This
+  is why the **chuck is casing and does not turn**: a ring that size sweeps 6.9 from centre through
+  a hole whose half-width is 4. It is also why the shaft stub is 4-in-6 — 2.83 against 3.0 — which
+  is Create's own proportion and, on this evidence, not an accident.
+- **Kinetic geometry is measured off Create, not guessed at.** `create:block/shaft.json` is **four**
+  pixels square, from 6 to 10, and `axis_top` darkens exactly the four corner pixels of its end,
+  which chamfers it into an **octagon**. So the stub is 4×4 and the bore it stands in is chamfered
+  to an octagon a pixel outside it — `frame(..., chamfer=1)`. A six-pixel square stub does not line
+  up with the shaft a player butts against it, and painting an octagon into the plate texture does
+  not work: the corners of a ring drawn on an octagonal metric fall *inside* a square hole and are
+  thrown away, leaving four slivers on the flats. Create's jar is in the Gradle cache; read it.
+- **`check_models.py` finds z-fighting**, and it is the only thing that will: two faces on the same
+  plane pointing the same way, overlapping. `generate_models.py` drops faces *buried* inside another
+  box, which is a different fault — two boxes that merely butt up against each other leave both faces
+  drawn. Direction is part of the test: back-to-back faces are culled by the renderer and never
+  fight. The checker walks `models/block` recursively; it globbed only the top level for a while and
+  so checked almost nothing.
+- **Each model declares only the textures its boxes use.** `to_model` trims the table it is handed,
+  so a texture cannot stay declared after the last face that drew it is gone — which is how the
+  `cog`, `back` and `nozzle` PNGs stayed in the repo and in CI's diff after nothing referenced them.
+  `check_models.py` fails on a declared-but-undrawn texture for the same reason.
+- **Model UVs are clamped into 0..16.** The barrel reaches nine pixels outside the cell, and a face
+  derived from coordinates outside it samples whatever is packed next door in the atlas — a fault
+  that cannot be seen in a render and cannot be predicted from the model.
+- `GAUGE` in `generate_models.py` and `GAUGE_START` in the renderer have to agree — that is what
+  makes the mud drain back away from the chuck rather than sink or slide.
+- **Two authoring conventions, on purpose.** the casing models are authored facing south with
+  the shaft along X, which is the orientation Create authors its Deployer in, so the twelve-variant
+  blockstate table is Create's table. `terraform_extruder/head.json` is authored pointing
+  up because that is what Create's orientation transform expects. Each only has to agree with the
+  thing that rotates it. `models/item/terraform_extruder.json` inlines both at rest, generated from
+  the same sources so it cannot drift.
+- **The shaft stub spins but does not advance; the barrel does both.** A string sliding through a
+  chuck that stays put is what makes the machine read as a drill rather than a piston.
+- **The spin is measured about the POSITIVE direction of the axis**, because that is what
+  `getAngleForBe` returns and what Create's own `kineticRotationTransform` rotates about —
+  `rotateCentered(angle, Direction.get(POSITIVE, axis))`. Our partials are swung onto the *facing*,
+  which is the negative direction for north, west and down, so the angle has to be negated there or
+  the machine turns backwards against the shaft driving it. Half of all placements looked wrong.
+- **The barrel's travel is a lead, not a stroke.** A pixel and a half, derived from the angle of turn
+  and nothing else: the barrel is threaded, so turning it walks it. That is what keeps it in step
+  with the spin for free, makes it speed up and stop with the shaft, and means it never has to be
+  suppressed when the machine is not printing — which an eighteen-pixel cycle-timed stroke did, and
+  which is why `ExtruderIdleReason` used to gate the animation. It is still synced, but now only for
+  the goggle overlay. At rest the cutting head stops one pixel short of the block being printed into,
+  so the lead is exactly enough to bite it once a turn.
+- **Both drill collars sit beyond the chuck even at rest**, and the barrel only ever travels further
+  out, so neither can be driven back through a hole it does not fit. Clearances around the chuck and
+  barrel are fractions of a pixel rather than whole ones, because two faces landing on the same plane
+  z-fight.
 - **The bucket is deliberately not ours.** `neoforge:fluid_container` over `neoforge:item/bucket`
   composites the vanilla sprite with the fluid's still texture. A hand-drawn one has to reproduce a
   silhouette every player knows by heart and reads as wrong if it is slightly off — which it was.

@@ -81,6 +81,9 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 	/** Longest a cycle may be stretched to, so a machine crawling at 1 RPM still eventually fires. */
 	private static final int MAX_CYCLE_TICKS = 1200;
 
+	/** Blocks in front the machine works at. Create's Deployer uses the same two. */
+	public static final int REACH = 2;
+
 	private SmartFluidTankBehaviour tank;
 
 	private int timer;
@@ -168,6 +171,22 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 		return sample.size();
 	}
 
+	/**
+	 * How full the tank is, 0 to 1, for the sight band.
+	 *
+	 * <p>Read from the tank behaviour rather than from anything this class syncs: a
+	 * {@code SmartFluidTankBehaviour} already keeps the client's copy up to date on its own, and
+	 * already smooths it, so the gauge moves rather than stepping.
+	 */
+	public float getFillLevel() {
+		int capacity = tank.getPrimaryHandler()
+			.getCapacity();
+		if (capacity <= 0)
+			return 0F;
+		return Math.min(1F, tank.getPrimaryHandler()
+			.getFluidAmount() / (float) capacity);
+	}
+
 	public ExtruderIdleReason getIdleReason() {
 		return idleReason;
 	}
@@ -240,7 +259,7 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 	}
 
 	private void print(ServerLevel serverLevel) {
-		BlockPos target = worldPosition.relative(getFacing());
+		BlockPos target = target();
 		BlockState existing = serverLevel.getBlockState(target);
 
 		if (!PlacementRules.canOverwrite(existing)) {
@@ -283,7 +302,7 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 	private void requestSurveyIfLow(ServerLevel serverLevel) {
 		if (pending != null || barrenCooldown > 0)
 			return;
-		BlockPos target = worldPosition.relative(getFacing());
+		BlockPos target = target();
 		if (target.getY() == sampleY && sample.size() > TerraformConfig.sliceLowWaterMark())
 			return;
 		if (!hasSubstrate())
@@ -317,6 +336,19 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 			return;
 		}
 		acceptSample(slice);
+	}
+
+	/**
+	 * Two blocks out, not one.
+	 *
+	 * <p>Every Create machine of this shape works at arm's length: {@code DeployerBlockEntity}
+	 * acts on {@code worldPosition.relative(facing, 2)}, and a Mechanical Press, a Spout and a
+	 * Mixer all leave the block directly in front of them empty for the working part to travel
+	 * through. Reaching only one block would make this the odd machine out, and would leave nowhere
+	 * for the ram to be seen moving.
+	 */
+	public BlockPos target() {
+		return worldPosition.relative(getFacing(), REACH);
 	}
 
 	private Direction getFacing() {

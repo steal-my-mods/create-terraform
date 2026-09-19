@@ -1,0 +1,79 @@
+{
+  "__comment": "The shaft stub, spun about the facing by TerraformExtruderRenderer. Authored pointing up, like the barrel. It turns and does not advance; the barrel does both, and slides through the chuck the casing holds.",
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "createterraform:block/terraform_extruder_shaft",
+    "shaft": "createterraform:block/terraform_extruder_shaft"
+  },
+  "elements": [
+    {
+      "__comment": "The shaft stub standing in the back bore, flush with the plate so a real shaft butted against it meets it end to end. Four pixels square, from 6 to 10, because that is what create:block/shaft.json is -- a six-pixel stub would not line up with the shaft a player puts against it.",
+      "from": [
+        6,
+        0,
+        6
+      ],
+      "to": [
+        10,
+        2,
+        10
+      ],
+      "faces": {
+        "east": {
+          "texture": "#shaft",
+          "uv": [
+            0.0,
+            6,
+            2,
+            10
+          ]
+        },
+        "west": {
+          "texture": "#shaft",
+          "uv": [
+            0.0,
+            6,
+            2,
+            10
+          ]
+        },
+        "up": {
+          "texture": "#shaft",
+          "uv": [
+            6,
+            6,
+            10,
+            10
+          ]
+        },
+        "down": {
+          "texture": "#shaft",
+          "uv": [
+            6,
+            6,
+            10,
+            10
+          ]
+        },
+        "south": {
+          "texture": "#shaft",
+          "uv": [
+            6,
+            14,
+            10,
+            16.0
+          ]
+        },
+        "north": {
+          "texture": "#shaft",
+          "uv": [
+            6,
+            14,
+            10,
+            16.0
+          ]
+        }
+      }
+    }
+  ]
+}

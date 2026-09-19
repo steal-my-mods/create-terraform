@@ -1,0 +1,79 @@
+{
+  "__comment": "The mud in the tank, drawn by TerraformExtruderRenderer and squashed to the tank's fill level.",
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "createterraform:block/terraform_extruder_substrate",
+    "substrate": "createterraform:block/terraform_extruder_substrate"
+  },
+  "elements": [
+    {
+      "__comment": "Shy of the tank walls on every side, so nothing shares a plane with them.",
+      "from": [
+        4.3,
+        3.3,
+        13
+      ],
+      "to": [
+        11.7,
+        11.7,
+        15.5
+      ],
+      "faces": {
+        "east": {
+          "texture": "#substrate",
+          "uv": [
+            3.3,
+            0.5,
+            11.7,
+            3
+          ]
+        },
+        "west": {
+          "texture": "#substrate",
+          "uv": [
+            3.3,
+            0.5,
+            11.7,
+            3
+          ]
+        },
+        "up": {
+          "texture": "#substrate",
+          "uv": [
+            4.3,
+            13,
+            11.7,
+            15.5
+          ]
+        },
+        "down": {
+          "texture": "#substrate",
+          "uv": [
+            4.3,
+            13,
+            11.7,
+            15.5
+          ]
+        },
+        "south": {
+          "texture": "#substrate",
+          "uv": [
+            4.3,
+            4.3,
+            11.7,
+            12.7
+          ]
+        },
+        "north": {
+          "texture": "#substrate",
+          "uv": [
+            4.3,
+            4.3,
+            11.7,
+            12.7
+          ]
+        }
+      }
+    }
+  ]
+}

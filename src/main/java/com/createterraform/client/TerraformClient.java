@@ -1,6 +1,7 @@
 package com.createterraform.client;
 
 import com.createterraform.CreateTerraform;
+import com.createterraform.registry.TerraformBlockEntities;
 import com.createterraform.registry.TerraformFluids;
 
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
@@ -8,14 +9,18 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
 
 /**
- * Everything the client needs, which for this mod is only the fluid.
+ * Everything the client needs: the fluid's appearance, and the renderer that drives the Extruder's
+ * ram.
  *
- * <p>The Extruder has no renderer and no Flywheel visual: nothing on it moves. Its whole animation is
- * the world changing in front of it, which every client already draws.
+ * <p>No Flywheel visual yet, deliberately. Without one Create never skips the block entity renderer,
+ * so the ram draws on every backend; adding a visual later means writing the same geometry twice and
+ * keeping the two in step, which is only worth it once there are enough Extruders on screen for
+ * instancing to pay.
  */
 public class TerraformClient {
 
@@ -26,7 +31,18 @@ public class TerraformClient {
 
 	public static void init(IEventBus modBus) {
 		modBus.addListener(TerraformClient::registerClientExtensions);
+		modBus.addListener(TerraformClient::registerRenderers);
 		modBus.addListener(TerraformClient::clientSetup);
+		TerraformPartials.init();
+	}
+
+	/**
+	 * The Extruder's ram. The casing is a plain block model and needs nothing; the head moves, so it
+	 * is a partial drawn here.
+	 */
+	private static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+		event.registerBlockEntityRenderer(TerraformBlockEntities.TERRAFORM_EXTRUDER.get(),
+			TerraformExtruderRenderer::new);
 	}
 
 	private static void clientSetup(FMLClientSetupEvent event) {

@@ -58,10 +58,14 @@ import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
 public class ExtruderMovementBehaviour implements MovementBehaviour {
 
 	/**
-	 * Far enough past the block's own centre to land in the next block along, and no further. The
-	 * Mechanical Drill uses the same 0.65 for the same reason.
+	 * Two blocks ahead, which is Create's Deployer exactly — {@code DeployerMovementBehaviour}
+	 * returns {@code scale(2.0)} and the stationary one acts on {@code relative(facing, 2)}.
+	 *
+	 * <p>The Drill's 0.65 was the wrong model to copy. A Drill is pressed against the rock it
+	 * breaks; a machine of this shape works at arm's length, leaving the block in front empty for
+	 * the ram to travel through, which is the whole reason it looks like it reaches.
 	 */
-	private static final double ACTIVE_AREA_REACH = 0.65;
+	private static final double ACTIVE_AREA_REACH = TerraformExtruderBlockEntity.REACH;
 
 	/**
 	 * Starts on the contraption's first chunk the moment it assembles.

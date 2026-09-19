@@ -24,6 +24,9 @@ public class TerraformBlocks {
 			.mapColor(MapColor.DEEPSLATE)
 			.strength(3.5F, 8.0F)
 			.sound(SoundType.NETHERITE_BLOCK)
+			// The casing is open at the front and inset at the sides, so neighbours must not cull
+			// their faces against it.
+			.noOcclusion()
 			.requiresCorrectToolForDrops()));
 
 	public static final DeferredBlock<LiquidBlock> MINERAL_SUBSTRATE =

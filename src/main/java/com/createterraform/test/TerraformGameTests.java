@@ -68,10 +68,17 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public class TerraformGameTests {
 
-	/** Motor, then Extruder, then the block it prints into — west to east, near the rig's floor. */
-	private static final BlockPos DRIVER = new BlockPos(4, 1, 6);
+	/**
+	 * Motor, Extruder, gap, then the block it prints into, west to east.
+	 *
+	 * <p>Rotation enters an Extruder through the face behind the one it prints out of — the drive is
+	 * coaxial with the barrel it turns, as a Mechanical Drill's is. So with the machine facing east
+	 * the motor sits one west of it, pointing back into it.
+	 */
 	private static final BlockPos EXTRUDER = new BlockPos(5, 1, 6);
-	private static final BlockPos TARGET = new BlockPos(6, 1, 6);
+	private static final BlockPos DRIVER = new BlockPos(4, 1, 6);
+	/** Two east of the Extruder: these machines work at arm's length, as a Deployer does. */
+	private static final BlockPos TARGET = new BlockPos(7, 1, 6);
 
 	/**
 	 * The bearing rig: a Mechanical Bearing pointing up with a three-block arm on it and the Extruder
@@ -215,6 +222,28 @@ public class TerraformGameTests {
 				"spent " + spent + "mB for " + extruder.getPrinted() + " blocks, expected " + expected + "mB");
 			helper.succeed();
 		});
+	}
+
+	/**
+	 * The number the sight band reads. Worth a test of its own because nothing else checks it and it
+	 * is drawn, not printed: a gauge stuck at full looks exactly like a gauge that works.
+	 */
+	@GameTest(template = "test_rig", timeoutTicks = 100)
+	public static void theGaugeTracksWhatIsInTheTank(GameTestHelper helper) {
+		helper.setBlock(EXTRUDER, extruderFacing(Direction.EAST));
+		TerraformExtruderBlockEntity extruder = extruder(helper);
+
+		helper.assertTrue(extruder.getFillLevel() == 0F, "an empty tank should read empty");
+		fill(helper, Integer.MAX_VALUE);
+		helper.assertTrue(extruder.getFillLevel() == 1F,
+			"a full tank read " + extruder.getFillLevel());
+
+		extruder.getTankCapability()
+			.drain(new FluidStack(TerraformFluids.MINERAL_SUBSTRATE.get(), extruder.getTankCapacity() / 2),
+				FluidAction.EXECUTE);
+		float half = extruder.getFillLevel();
+		helper.assertTrue(half > 0.4F && half < 0.6F, "a half-drained tank read " + half);
+		helper.succeed();
 	}
 
 	/** Throughput is the speed on the gauge: twice the RPM, half the wait, down to the floor. */
@@ -767,11 +796,11 @@ public class TerraformGameTests {
 			.setValue(BlockStateProperties.FACING, facing);
 	}
 
-	/** Creative motor, then the Extruder pointing away from it. */
+	/** The Extruder, with a creative motor behind it that drives it. */
 	private static void rig(GameTestHelper helper, Direction facing) {
-		helper.setBlock(DRIVER, AllBlocks.CREATIVE_MOTOR.getDefaultState()
-			.setValue(BlockStateProperties.FACING, facing));
 		helper.setBlock(EXTRUDER, extruderFacing(facing));
+		helper.setBlock(DRIVER, AllBlocks.CREATIVE_MOTOR.getDefaultState()
+			.setValue(BlockStateProperties.FACING, Direction.EAST));
 	}
 
 	/**
