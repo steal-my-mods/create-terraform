@@ -1,0 +1,6 @@
+{
+  "__comment": "A fluid block has no geometry -- the fluid renderer draws it. All this has to supply is the particle sprite, exactly as minecraft:block/water does.",
+  "textures": {
+    "particle": "createterraform:fluid/mineral_substrate_still"
+  }
+}

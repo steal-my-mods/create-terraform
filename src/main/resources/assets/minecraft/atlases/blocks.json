@@ -1,0 +1,13 @@
+{
+  "__comment": "Fluid sprites are looked up on the block atlas but are not referenced by any model, so nothing else would stitch them in.",
+  "sources": [
+    {
+      "type": "single",
+      "resource": "createterraform:fluid/mineral_substrate_still"
+    },
+    {
+      "type": "single",
+      "resource": "createterraform:fluid/mineral_substrate_flow"
+    }
+  ]
+}

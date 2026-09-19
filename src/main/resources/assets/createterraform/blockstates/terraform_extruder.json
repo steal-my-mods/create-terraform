@@ -1,0 +1,11 @@
+{
+  "__comment": "The model is authored with the aperture on its north face, so these are vanilla's own facing rotations -- identical to assets/minecraft/blockstates/observer.json.",
+  "variants": {
+    "facing=north": { "model": "createterraform:block/terraform_extruder" },
+    "facing=south": { "model": "createterraform:block/terraform_extruder", "y": 180 },
+    "facing=west": { "model": "createterraform:block/terraform_extruder", "y": 270 },
+    "facing=east": { "model": "createterraform:block/terraform_extruder", "y": 90 },
+    "facing=up": { "model": "createterraform:block/terraform_extruder", "x": 270 },
+    "facing=down": { "model": "createterraform:block/terraform_extruder", "x": 90 }
+  }
+}

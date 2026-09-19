@@ -1,0 +1,27 @@
+{
+  "__comment": "What an Extruder may write over, on top of anything already replaceable. The rule is 'the kind of thing an Extruder prints': base stone, deepslate and ore, so a stationary machine can overwrite its own output. A player's stone wall is in here, deliberately -- putting an Extruder against one is a decision.",
+  "values": [
+    "#minecraft:base_stone_overworld",
+    "#minecraft:base_stone_nether",
+    "#minecraft:stone_ore_replaceables",
+    "#minecraft:deepslate_ore_replaceables",
+    "#minecraft:coal_ores",
+    "#minecraft:copper_ores",
+    "#minecraft:iron_ores",
+    "#minecraft:gold_ores",
+    "#minecraft:redstone_ores",
+    "#minecraft:lapis_ores",
+    "#minecraft:diamond_ores",
+    "#minecraft:emerald_ores",
+    "minecraft:raw_iron_block",
+    "minecraft:raw_copper_block",
+    "minecraft:smooth_basalt",
+    "minecraft:gravel",
+    "minecraft:dirt",
+    "minecraft:end_stone",
+    "minecraft:netherrack",
+    "minecraft:nether_quartz_ore",
+    "minecraft:nether_gold_ore",
+    "minecraft:ancient_debris"
+  ]
+}

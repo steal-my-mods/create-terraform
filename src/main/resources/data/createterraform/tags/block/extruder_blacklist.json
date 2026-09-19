@@ -1,0 +1,14 @@
+{
+  "__comment": "Blocks the Extruder prints as air however the strata come out. Fluids, block entities and anything with no destroy time are refused on their own properties and do not need listing here.",
+  "values": [
+    "minecraft:bedrock",
+    "minecraft:end_portal_frame",
+    "minecraft:reinforced_deepslate",
+    "minecraft:barrier",
+    "minecraft:light",
+    "minecraft:structure_void",
+    "minecraft:end_portal",
+    "minecraft:end_gateway",
+    "minecraft:nether_portal"
+  ]
+}

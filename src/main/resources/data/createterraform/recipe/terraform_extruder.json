@@ -1,0 +1,24 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": true,
+  "category": "misc",
+  "key": {
+    "R": { "item": "create:mechanical_press" },
+    "C": { "item": "create:brass_casing" },
+    "E": { "item": "create:electron_tube" },
+    "M": { "item": "create:precision_mechanism" },
+    "P": { "item": "create:mechanical_pump" },
+    "N": { "item": "minecraft:nether_star" }
+  },
+  "pattern": [
+    "RCECR",
+    "CMPMC",
+    "EPNPE",
+    "CMPMC",
+    "RCECR"
+  ],
+  "result": {
+    "count": 16,
+    "id": "createterraform:terraform_extruder"
+  }
+}

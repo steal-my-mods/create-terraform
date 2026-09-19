@@ -1,0 +1,20 @@
+{
+  "itemGroup.createterraform": "Create: Terraform",
+
+  "block.createterraform.terraform_extruder": "Terraform Extruder",
+  "block.createterraform.mineral_substrate": "Mineral Substrate",
+  "item.createterraform.mineral_substrate_bucket": "Mineral Substrate Bucket",
+  "fluid.createterraform.mineral_substrate": "Mineral Substrate",
+
+  "createterraform.tooltip.terraform_extruder.title": "Terraform Extruder",
+  "createterraform.tooltip.terraform_extruder.substrate": "Mineral Substrate",
+  "createterraform.tooltip.terraform_extruder.sample": "Core sample",
+  "createterraform.tooltip.terraform_extruder.interval": "Printing",
+  "createterraform.tooltip.terraform_extruder.last": "Last printed",
+  "createterraform.tooltip.terraform_extruder.idle.none": "Printing",
+  "createterraform.tooltip.terraform_extruder.idle.no_rotation": "No rotational force",
+  "createterraform.tooltip.terraform_extruder.idle.no_substrate": "Out of Mineral Substrate",
+  "createterraform.tooltip.terraform_extruder.idle.obstructed": "Blocked",
+  "createterraform.tooltip.terraform_extruder.idle.surveying": "Taking a core sample",
+  "createterraform.tooltip.terraform_extruder.idle.barren": "Nothing but sky at this depth"
+}

@@ -1,0 +1,6 @@
+{
+  "__comment": "The real bucket with substrate in it, rather than a bucket of this mod's own drawing. NeoForge's fluid_container loader composites the vanilla item/bucket sprite with the fluid's own still texture masked into the pail, so this follows resource packs and is pixel-identical to every other bucket in the game. The fluid sprite comes from IClientFluidTypeExtensions -- see TerraformClient.",
+  "parent": "neoforge:item/bucket",
+  "loader": "neoforge:fluid_container",
+  "fluid": "createterraform:mineral_substrate"
+}
