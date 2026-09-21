@@ -38,7 +38,7 @@ OUT = 'src/main/resources/assets/' + NS
 
 TEX = {k: f'{NS}:block/terraform_extruder_{k}' for k in
        ('casing', 'rail', 'collar', 'drive', 'die', 'ram', 'shaft',
-        'barrel', 'chuck', 'substrate')}
+        'barrel', 'chuck', 'shaft_end', 'substrate')}
 
 #: How far the mud reaches along the facing axis. The gauge partial and the renderer agree with this,
 #: and it is held a fraction clear of the tank walls at both ends: mud that lands exactly on a wall
@@ -203,14 +203,28 @@ def to_model(boxes, textures, comment):
             if covered(face, box, boxes):
                 continue
             u, v = SPAN[face]
-            uv = [box['from'][u], 16 - box['to'][v], box['to'][u], 16 - box['from'][v]] \
-                if face in ('north', 'south', 'east', 'west') else \
-                [box['from'][u], box['from'][v], box['to'][u], box['to'][v]]
+            along = box.get('__rod')
+            if along is not None:
+                # A rod is the one shape whose faces cannot take their UVs from their own extents.
+                # Derived that way, the two faces whose width runs along the LENGTH of the bar sample
+                # the texture sideways -- for a twenty-pixel barrel that walks clean off the end of
+                # the profile and shows the flat background, so two sides of the tube come out with
+                # no colour on them at all. Create sets all four sides of create:block/shaft.json to
+                # the same [6,0,10,16] for exactly this reason. Cross-section across, length down.
+                cross = [a for a in range(3) if a != along][0]
+                lo, hi = box['from'][cross], box['to'][cross]
+                uv = [lo, lo, hi, hi] if AXES[face][0] == along else [lo, 0, hi, 16]
+            else:
+                uv = [box['from'][u], 16 - box['to'][v], box['to'][u], 16 - box['from'][v]] \
+                    if face in ('north', 'south', 'east', 'west') else \
+                    [box['from'][u], box['from'][v], box['to'][u], box['to'][v]]
             # Clamped, because a box that reaches outside the cell -- and the barrel reaches a long
             # way outside it -- derives UVs outside the sprite. In an atlas that samples whatever
             # texture happens to be next door, which is a fault that cannot be seen in a render and
             # cannot be predicted from the model, since it depends on atlas packing.
-            entry = {'texture': '#' + box['__tex'],
+            end = box.get('__tex_end')
+            texture = end if (end and AXES[face][0] == box.get('__rod')) else box['__tex']
+            entry = {'texture': '#' + texture,
                      'uv': [round(min(16.0, max(0.0, c)), 2) for c in uv]}
             _, at = AXES[face]
             edge = box['to' if face in ('east', 'up', 'south') else 'from'][AXES[face][0]]
@@ -224,7 +238,7 @@ def to_model(boxes, textures, comment):
     # Trimmed to what the boxes actually use. Declaring a texture no face draws is harmless to the
     # game and poisonous to housekeeping: it keeps a PNG that nothing uses looking used, so the file
     # stays in the repo and in CI's diff. Callers hand over the whole table and this decides.
-    used = {box['__tex'] for box in boxes}
+    used = {box['__tex'] for box in boxes} | {b['__tex_end'] for b in boxes if b.get('__tex_end')}
     textures = {k: v for k, v in textures.items() if k in used}
     particle = textures.get('casing') or next(iter(textures.values()))
     return {'__comment': comment, 'parent': 'minecraft:block/block',
@@ -283,7 +297,7 @@ def main():
     # cutting head. It both turns about the facing and advances along it, which is why it is a
     # partial and not part of the casing.
     barrel = [
-        {'from': [5.5, 2, 5.5], 'to': [10.5, 9, 10.5], '__tex': 'ram',
+        {'from': [5.5, 2, 5.5], 'to': [10.5, 9, 10.5], '__tex': 'ram', '__rod': 1,
          '__note': 'The string, running from the back plate to the chuck. Six pixels square rather '
                    'than four, so it fills the bore behind the stub: at four you look straight down '
                    'the socket past it and see the brass of the barrel, which reads as brass sitting '
@@ -292,19 +306,19 @@ def main():
                    'faces in one model; and the shaft stub behind it, because the stub does not '
                    'advance and this does, so any overlap has the stub sinking into it and rising '
                    'back out once a turn -- something clipping in and out inside the socket.'},
-        {'from': [5.5, 9, 5.5], 'to': [10.5, 29, 10.5], '__tex': 'barrel',
+        {'from': [5.5, 9, 5.5], 'to': [10.5, 29, 10.5], '__tex': 'barrel', '__rod': 1,
          '__note': 'The barrel, running out through the chuck and most of the way across the empty '
                    'block in front -- a Deployer\'s pole is modelled past its own boundary for the '
                    'same reason. At rest the cutting head stops one pixel short of the block being '
                    'printed into, and the helical travel is what closes that pixel, so the machine '
                    'visibly bites what it is working on once a turn.'},
-        {'from': [4.8, 16, 4.8], 'to': [11.2, 17, 11.2], '__tex': 'drive',
-         '__note': 'Drill collars, which are what tell a tube from a peg. Both sit beyond the chuck '
+        {'from': [4.8, 16, 4.8], 'to': [11.2, 17, 11.2], '__tex': 'ram', '__rod': 1,
+         '__note': 'Drill collars in steel against the brass, which is what tells a tube from a peg. Both sit beyond the chuck '
                    'even at rest and the barrel only ever travels further out, so neither can be '
                    'driven back through a hole it does not fit -- which is the one thing that would '
                    'give the whole arrangement away.'},
-        {'from': [4.8, 24, 4.8], 'to': [11.2, 25, 11.2], '__tex': 'drive'},
-        {'from': [5.8, 29, 5.8], 'to': [10.2, 31, 10.2], '__tex': 'die',
+        {'from': [4.8, 24, 4.8], 'to': [11.2, 25, 11.2], '__tex': 'ram', '__rod': 1},
+        {'from': [5.8, 29, 5.8], 'to': [10.2, 31, 10.2], '__tex': 'die', '__rod': 1,
          '__note': 'The cutting head.'},
     ]
     model = to_model(barrel, dict(TEX),
@@ -321,7 +335,7 @@ def main():
     # arithmetic above showed a ring that size cannot turn inside this block without coming out
     # through the side of it.
     spindle = [
-        {'from': [6, 0, 6], 'to': [10, 2, 10], '__tex': 'shaft',
+        {'from': [6, 0, 6], 'to': [10, 2, 10], '__tex': 'shaft', '__rod': 1, '__tex_end': 'shaft_end',
          '__note': 'The shaft stub standing in the back bore, flush with the plate so a real shaft '
                    'butted against it meets it end to end. Four pixels square, from 6 to 10, because '
                    'that is what create:block/shaft.json is -- a six-pixel stub would not line up '
@@ -377,7 +391,8 @@ def main():
                          'model and the partials, so it cannot drift out of step.',
             'parent': 'minecraft:block/block',
             'textures': dict(shell['textures'],
-                             **{b['__tex']: TEX[b['__tex']] for p in (barrel, spindle) for b in p}),
+                             **{name: TEX[name] for p in (barrel, spindle) for b in p
+                                for name in (b['__tex'], b.get('__tex_end')) if name}),
             'elements': [{k: v for k, v in e.items() if k != '__comment'} for e in shell['elements']] + extra}
     write('models/item/terraform_extruder.json', item)
     return 0

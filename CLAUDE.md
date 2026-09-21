@@ -171,6 +171,48 @@ modes that are silent, expensive and easy to reintroduce.
   not a solid block — the Extruder is a twelve-pixel casing with an open mouth and sets
   `noOcclusion()`. A solid model may still leave one face open if something opaque backs it, via
   `"__backed": ["<face>"]`.
+- **Textures are ramps, not palettes.** `ramp()` builds twelve steps of slate, ten of brass and nine
+  of mud; a texture picks a *level* off one. Create's block textures carry seventeen or eighteen
+  colours apiece.
+- **Textures are material; geometry is structure.** This casing is twenty-five boxes and each one
+  crops a 16x16 texture — the plinth gets rows 14-16, a bore strip gets columns 1-5, a chamfer gets a
+  single pixel. So a texture drawn the way Create draws a casing, with an outline and a lit bevel and
+  four corner bolts, lands its outline in the middle of some faces and nowhere on others and puts
+  bolts wherever a crop happens to cover them: frames inside frames, which is what "too much going
+  on" turned out to be. Create's andesite casing carries a frame because it is a texture on a
+  **cube** and there is no geometry to carry one. Here there is, and Minecraft's directional face
+  shading draws every edge of it for free. `material()` is therefore plain grain, uniform under any
+  crop, and anything drawn on top of it has to be information the geometry cannot express — the
+  octagonal rim of a socket, the jaws of a chuck, the glow at the tip of a die — positioned against
+  something the model guarantees rather than against the edge of a square that will be cut up.
+- **A rod's four side faces all take the same UV.** It is the one shape whose faces cannot take UVs
+  from their own extents: derived that way, the two faces whose width runs along the *length* of the
+  bar sample the texture sideways, and for a twenty-pixel barrel that walks clean off the end of the
+  profile into flat background — two sides of the tube come out with no colour on them at all.
+  `create:block/shaft.json` sets all four sides to `[6,0,10,16]` for exactly this reason: cross
+  section across, length down. `__rod` in `generate_models.py` does it, and `__tex_end` gives the
+  ends their own texture, which they need because the strip has no room left for one — the same
+  reason Create splits `axis` from `axis_top`.
+- **A surface is grain, not a gradient.** Read `create:block/andesite_casing.png` pixel by pixel and
+  it is a hard outline, a bright bevel inside it, and an interior of high-frequency variation
+  streaked along one axis. There is no smooth ramp anywhere in it. `streak()` does this: a stable
+  value per line with a pixel of jitter on top. **Structured** variation is information — grain,
+  wear, machining. Isotropic per-pixel noise is not, and Minecraft's own style guide says so.
+- **The three named ways to make a surface look flat**, all of which versions of this block managed:
+    - **Banding** — pixels lined up brightest to darkest in straight rows. That is what `gradient()`
+      does across a whole face, so it is reserved for something that really is a smooth curve.
+    - **Pillow shading** — shades applied concentrically from the outline inwards. The chuck ring had
+      it.
+    - **Pancake shading** — highlight on one side, shadow on the other, disregarding the shape. The
+      barrel had it, and on a part that *turns* it is worse than flat: half the faces are lit at any
+      moment and which half keeps changing, so the machine looks like it is flashing rather than
+      spinning.
+- **A part that rotates is shaded symmetrically about its axis.** `rod()` is dark at both edges and
+  light through the core, which reads the same from every angle — Create's own `axis.png` is exactly
+  this. Its detail runs *along* the length, where rotation does not carry it.
+- **Dither at a boundary, never over a surface.** The style guide's words are "the overuse of
+  dithering where the transition starts, covering too much surface area". A pass that blanketed
+  `blend()` over every face put a checkerboard on the whole machine.
 - **Models are generated, not hand-authored.** `tools/generate_models.py` drops every face that is
   buried inside another box, which is the only practical defence against z-fighting across a dozen
   boxes — the shimmering checkerboard only shows up once the block is in the world. Do not hand-edit

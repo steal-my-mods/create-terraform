@@ -2,8 +2,7 @@
   "__comment": "The core barrel, turned and advanced by TerraformExtruderRenderer. Authored pointing UP -- the renderer swings it onto the facing with Create's own transform, which expects up -- and both spun about and translated along its own axis.",
   "parent": "minecraft:block/block",
   "textures": {
-    "particle": "createterraform:block/terraform_extruder_drive",
-    "drive": "createterraform:block/terraform_extruder_drive",
+    "particle": "createterraform:block/terraform_extruder_die",
     "die": "createterraform:block/terraform_extruder_die",
     "ram": "createterraform:block/terraform_extruder_ram",
     "barrel": "createterraform:block/terraform_extruder_barrel"
@@ -25,19 +24,19 @@
         "east": {
           "texture": "#ram",
           "uv": [
-            2,
             5.5,
-            9,
-            10.5
+            0.0,
+            10.5,
+            16.0
           ]
         },
         "west": {
           "texture": "#ram",
           "uv": [
-            2,
             5.5,
-            9,
-            10.5
+            0.0,
+            10.5,
+            16.0
           ]
         },
         "down": {
@@ -53,18 +52,18 @@
           "texture": "#ram",
           "uv": [
             5.5,
-            7,
+            0.0,
             10.5,
-            14
+            16.0
           ]
         },
         "north": {
           "texture": "#ram",
           "uv": [
             5.5,
-            7,
+            0.0,
             10.5,
-            14
+            16.0
           ]
         }
       }
@@ -85,19 +84,19 @@
         "east": {
           "texture": "#barrel",
           "uv": [
-            9,
             5.5,
-            16.0,
-            10.5
+            0.0,
+            10.5,
+            16.0
           ]
         },
         "west": {
           "texture": "#barrel",
           "uv": [
-            9,
             5.5,
-            16.0,
-            10.5
+            0.0,
+            10.5,
+            16.0
           ]
         },
         "up": {
@@ -115,7 +114,7 @@
             5.5,
             0.0,
             10.5,
-            7
+            16.0
           ]
         },
         "north": {
@@ -124,13 +123,13 @@
             5.5,
             0.0,
             10.5,
-            7
+            16.0
           ]
         }
       }
     },
     {
-      "__comment": "Drill collars, which are what tell a tube from a peg. Both sit beyond the chuck even at rest and the barrel only ever travels further out, so neither can be driven back through a hole it does not fit -- which is the one thing that would give the whole arrangement away.",
+      "__comment": "Drill collars in steel against the brass, which is what tells a tube from a peg. Both sit beyond the chuck even at rest and the barrel only ever travels further out, so neither can be driven back through a hole it does not fit -- which is the one thing that would give the whole arrangement away.",
       "from": [
         4.8,
         16,
@@ -143,25 +142,25 @@
       ],
       "faces": {
         "east": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
-            16.0,
             4.8,
-            16.0,
-            11.2
+            0.0,
+            11.2,
+            16.0
           ]
         },
         "west": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
-            16.0,
             4.8,
-            16.0,
-            11.2
+            0.0,
+            11.2,
+            16.0
           ]
         },
         "up": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             4.8,
@@ -170,7 +169,7 @@
           ]
         },
         "down": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             4.8,
@@ -179,21 +178,21 @@
           ]
         },
         "south": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             0.0,
             11.2,
-            0.0
+            16.0
           ]
         },
         "north": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             0.0,
             11.2,
-            0.0
+            16.0
           ]
         }
       }
@@ -211,25 +210,25 @@
       ],
       "faces": {
         "east": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
-            16.0,
             4.8,
-            16.0,
-            11.2
+            0.0,
+            11.2,
+            16.0
           ]
         },
         "west": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
-            16.0,
             4.8,
-            16.0,
-            11.2
+            0.0,
+            11.2,
+            16.0
           ]
         },
         "up": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             4.8,
@@ -238,7 +237,7 @@
           ]
         },
         "down": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             4.8,
@@ -247,21 +246,21 @@
           ]
         },
         "south": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             0.0,
             11.2,
-            0.0
+            16.0
           ]
         },
         "north": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             0.0,
             11.2,
-            0.0
+            16.0
           ]
         }
       }
@@ -282,19 +281,19 @@
         "east": {
           "texture": "#die",
           "uv": [
-            16.0,
             5.8,
-            16.0,
-            10.2
+            0.0,
+            10.2,
+            16.0
           ]
         },
         "west": {
           "texture": "#die",
           "uv": [
-            16.0,
             5.8,
-            16.0,
-            10.2
+            0.0,
+            10.2,
+            16.0
           ]
         },
         "up": {
@@ -312,7 +311,7 @@
             5.8,
             0.0,
             10.2,
-            0.0
+            16.0
           ]
         },
         "north": {
@@ -321,7 +320,7 @@
             5.8,
             0.0,
             10.2,
-            0.0
+            16.0
           ]
         }
       }

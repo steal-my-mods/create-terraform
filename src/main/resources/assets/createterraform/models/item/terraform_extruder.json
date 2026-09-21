@@ -11,7 +11,8 @@
     "ram": "createterraform:block/terraform_extruder_ram",
     "barrel": "createterraform:block/terraform_extruder_barrel",
     "die": "createterraform:block/terraform_extruder_die",
-    "shaft": "createterraform:block/terraform_extruder_shaft"
+    "shaft": "createterraform:block/terraform_extruder_shaft",
+    "shaft_end": "createterraform:block/terraform_extruder_shaft_end"
   },
   "elements": [
     {
@@ -1396,19 +1397,19 @@
         "east": {
           "texture": "#ram",
           "uv": [
-            2,
             5.5,
-            9,
-            10.5
+            0.0,
+            10.5,
+            16.0
           ]
         },
         "west": {
           "texture": "#ram",
           "uv": [
-            2,
             5.5,
-            9,
-            10.5
+            0.0,
+            10.5,
+            16.0
           ]
         },
         "south": {
@@ -1433,18 +1434,18 @@
           "texture": "#ram",
           "uv": [
             5.5,
-            7,
+            0.0,
             10.5,
-            14
+            16.0
           ]
         },
         "down": {
           "texture": "#ram",
           "uv": [
             5.5,
-            7,
+            0.0,
             10.5,
-            14
+            16.0
           ]
         }
       }
@@ -1464,19 +1465,19 @@
         "east": {
           "texture": "#barrel",
           "uv": [
-            9,
             5.5,
-            16.0,
-            10.5
+            0.0,
+            10.5,
+            16.0
           ]
         },
         "west": {
           "texture": "#barrel",
           "uv": [
-            9,
             5.5,
-            16.0,
-            10.5
+            0.0,
+            10.5,
+            16.0
           ]
         },
         "south": {
@@ -1503,7 +1504,7 @@
             5.5,
             0.0,
             10.5,
-            7
+            16.0
           ]
         },
         "down": {
@@ -1512,7 +1513,7 @@
             5.5,
             0.0,
             10.5,
-            7
+            16.0
           ]
         }
       }
@@ -1530,25 +1531,25 @@
       ],
       "faces": {
         "east": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
-            16.0,
             4.8,
-            16.0,
-            11.2
+            0.0,
+            11.2,
+            16.0
           ]
         },
         "west": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
-            16.0,
             4.8,
-            16.0,
-            11.2
+            0.0,
+            11.2,
+            16.0
           ]
         },
         "south": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             4.8,
@@ -1557,7 +1558,7 @@
           ]
         },
         "north": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             4.8,
@@ -1566,21 +1567,21 @@
           ]
         },
         "up": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             0.0,
             11.2,
-            0.0
+            16.0
           ]
         },
         "down": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             0.0,
             11.2,
-            0.0
+            16.0
           ]
         }
       }
@@ -1598,25 +1599,25 @@
       ],
       "faces": {
         "east": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
-            16.0,
             4.8,
-            16.0,
-            11.2
+            0.0,
+            11.2,
+            16.0
           ]
         },
         "west": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
-            16.0,
             4.8,
-            16.0,
-            11.2
+            0.0,
+            11.2,
+            16.0
           ]
         },
         "south": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             4.8,
@@ -1625,7 +1626,7 @@
           ]
         },
         "north": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             4.8,
@@ -1634,21 +1635,21 @@
           ]
         },
         "up": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             0.0,
             11.2,
-            0.0
+            16.0
           ]
         },
         "down": {
-          "texture": "#drive",
+          "texture": "#ram",
           "uv": [
             4.8,
             0.0,
             11.2,
-            0.0
+            16.0
           ]
         }
       }
@@ -1668,19 +1669,19 @@
         "east": {
           "texture": "#die",
           "uv": [
-            16.0,
             5.8,
-            16.0,
-            10.2
+            0.0,
+            10.2,
+            16.0
           ]
         },
         "west": {
           "texture": "#die",
           "uv": [
-            16.0,
             5.8,
-            16.0,
-            10.2
+            0.0,
+            10.2,
+            16.0
           ]
         },
         "south": {
@@ -1707,7 +1708,7 @@
             5.8,
             0.0,
             10.2,
-            0.0
+            16.0
           ]
         },
         "down": {
@@ -1716,7 +1717,7 @@
             5.8,
             0.0,
             10.2,
-            0.0
+            16.0
           ]
         }
       }
@@ -1736,23 +1737,23 @@
         "east": {
           "texture": "#shaft",
           "uv": [
-            0.0,
             6,
-            2,
-            10
+            0.0,
+            10,
+            16.0
           ]
         },
         "west": {
           "texture": "#shaft",
           "uv": [
-            0.0,
             6,
-            2,
-            10
+            0.0,
+            10,
+            16.0
           ]
         },
         "south": {
-          "texture": "#shaft",
+          "texture": "#shaft_end",
           "uv": [
             6,
             6,
@@ -1761,7 +1762,7 @@
           ]
         },
         "north": {
-          "texture": "#shaft",
+          "texture": "#shaft_end",
           "uv": [
             6,
             6,
@@ -1773,7 +1774,7 @@
           "texture": "#shaft",
           "uv": [
             6,
-            14,
+            0.0,
             10,
             16.0
           ]
@@ -1782,7 +1783,7 @@
           "texture": "#shaft",
           "uv": [
             6,
-            14,
+            0.0,
             10,
             16.0
           ]

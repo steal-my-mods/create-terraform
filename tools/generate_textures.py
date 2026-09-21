@@ -66,6 +66,19 @@ def shade(colour, amount):
     return tuple(max(0, min(255, c + amount)) for c in colour[:3]) + (colour[3],)
 
 
+def ramp(dark, light, steps):
+    """
+    Evenly spaced tones between two colours.
+
+    Create's block textures carry seventeen or eighteen colours apiece and spend them on gradients;
+    an earlier pass here spent four or five on hard steps and scattered per-pixel noise over the top,
+    which is why the machine read as busy rather than shaded. A ramp is the fix: pick a level, not a
+    colour, and let the tones in between do the softening.
+    """
+    return [tuple(round(d + (l - d) * i / (steps - 1)) for d, l in zip(dark[:3], light[:3])) + (255,)
+            for i in range(steps)]
+
+
 def canvas(width, height, colour):
     return [colour] * (width * height)
 
@@ -123,6 +136,18 @@ OCHRE_DEEP = (70, 48, 28, 255)
 OCHRE_LIGHT = (170, 128, 80, 255)
 EMBER = (206, 132, 56, 255)
 
+#: Twelve steps of slate, ten of brass, nine of mud. Deep ramps on purpose: Create's block
+#: textures carry seventeen or eighteen colours apiece and spend them on gradients, and a
+#: shallow ramp dithers between tones far enough apart that the dither itself is what you see.
+#:
+#: The slate ramp runs darker than the palette's own SLATE_DEEP so that **edges** have somewhere to
+#: go. Smoothing the surfaces is only half of it: Create's casings are smooth *and* hard-edged, and
+#: a pass that softened both turned this machine into a pale lump with no structure in it. Surfaces
+#: live in the middle of the ramp; outlines, recesses and sockets reach for its ends.
+SLATE_TONES = ramp(shade(SLATE_DEEP, -24), SLATE_LIGHT, 12)
+BRASS_TONES = ramp(BRASS_DARK, shade(BRASS_LIGHT, 18), 10)
+OCHRE_TONES = ramp(OCHRE_DEEP, OCHRE_LIGHT, 9)
+
 
 # --- the Extruder ---------------------------------------------------------------------------
 #
@@ -140,23 +165,113 @@ EMBER = (206, 132, 56, 255)
 # copied from Create; the palette is this mod's own slate and brass.
 
 
-def plate(salt, panel=True):
-    """The casing language: outline, bevel, optional recessed panel, corner bolts."""
-    pixels = canvas(16, 16, SLATE)
-    grain(pixels, 16, 16, salt, 4)
+def tone(tones, level):
+    """A tone from a ramp by position, 0.0 darkest to 1.0 lightest, clamped."""
+    return tones[max(0, min(len(tones) - 1, int(round(level * (len(tones) - 1)))))]
 
-    if panel:
-        rect(pixels, 16, 3, 3, 13, 13, shade(SLATE, -6))
-        frame(pixels, 16, 3, 3, 13, 13, SLATE_DARK)
 
-    for i in range(16):
-        put(pixels, 16, i, 1, SLATE_LIGHT)
-        put(pixels, 16, 1, i, SLATE_LIGHT)
-        put(pixels, 16, i, 14, SLATE_DARK)
-        put(pixels, 16, 14, i, SLATE_DARK)
-    frame(pixels, 16, 0, 0, 16, 16, SLATE_DEEP)
+#: A 4x4 ordered dither. Blending two adjacent ramp steps through this softens a transition without
+#: the salt-and-pepper that per-pixel hash noise leaves behind.
+BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
 
-    bolts(pixels, 16, [(2, 2), (13, 2), (2, 13), (13, 13)], SLATE_DEEP, SLATE_LIGHT)
+
+def blend(tones, level, x, y):
+    """A tone from a ramp at a fractional level, dithered between the two steps either side."""
+    span = (len(tones) - 1) * max(0.0, min(1.0, level))
+    low = int(span)
+    if low >= len(tones) - 1:
+        return tones[-1]
+    return tones[low + (1 if (span - low) * 16 > BAYER[y % 4][x % 4] else 0)]
+
+
+def gradient(pixels, width, height, tones, top, bottom):
+    """
+    A vertical ramp. Use it for something that really is a smooth curve, and almost nothing here is.
+
+    Minecraft's own style guide names three ways of shading a surface that make it read as flat, and
+    an earlier pass here managed all three:
+
+      * **banding** -- pixels lined up brightest to darkest in straight rows, which reveals the pixel
+        grid and flattens the shape. That is what this function does if you cover a face with it;
+      * **pillow shading** -- shades applied concentrically from the outline inwards;
+      * **pancake shading** -- highlight on one side, shadow on the other, disregarding the shape.
+        That is what the barrel had, and it is why it looked wrong turning: half its faces were lit
+        and half were not, and the lit half rotated with it.
+
+    What Create actually does is neither. Its andesite casing is a hard outline, a bright bevel and
+    an interior of high-frequency variation streaked along one axis; its shaft is symmetric across
+    its width with the variation running along its length. Structured variation is information --
+    grain, wear, machining. Isotropic per-pixel noise is not, and the style guide says so.
+    """
+    for y in range(height):
+        level = top + (bottom - top) * y / max(1, height - 1)
+        for x in range(width):
+            put(pixels, width, x, y, tone(tones, level))
+
+
+def streak(pixels, width, height, tones, base, spread, salt, along='y'):
+    """
+    Machined metal: a stable value per line, with a pixel of jitter on top.
+
+    This is the interior Create gives a casing -- not a gradient. Each streak runs the length of the
+    surface so the variation reads as grain rather than dirt, and the spread is kept small so the
+    face still reads as one material.
+    """
+    for y in range(height):
+        for x in range(width):
+            line = x if along == 'y' else y
+            level = base + spread * ((hash3(line, 0, salt) / 255.0) - 0.5)
+            level += spread * 0.45 * ((hash3(x, y, salt + 7) / 255.0) - 0.5)
+            put(pixels, width, x, y, tone(tones, level))
+
+
+def rod(tones, core=0.78, edge=0.16, salt=61, centre=8.0, radius=2.5):
+    """
+    A round bar seen from the side.
+
+    **Symmetric** across its width, which is the whole point: this thing turns, and the texture turns
+    with it. A highlight placed off to one side rotates with the barrel, so half the faces are lit at
+    any moment and which half keeps changing -- the machine looks like it is flashing rather than
+    spinning. Dark at both edges and light through the core reads the same from every angle, which is
+    what Create's own shaft does.
+
+    The detail is along the length, where rotation does not move it: a stable jitter per row, so the
+    barrel has wear to track as it turns instead of being four flat faces.
+    """
+    pixels = canvas(16, 16, tones[0])
+    for x in range(16):
+        across = min(1.0, abs(x + 0.5 - centre) / radius)
+        for y in range(16):
+            level = core - (core - edge) * across ** 1.25
+            # Wear along the length, where rotation does not carry it. Banded in pairs of rows so it
+            # reads as scoring on a turned bar rather than as dirt sprinkled over one.
+            level += 0.28 * ((hash3(y // 2, x % 2, salt) / 255.0) - 0.5)
+            put(pixels, 16, x, y, tone(tones, level))
+    return pixels
+
+
+def material(salt, base=0.44, spread=0.38, along='y'):
+    """
+    A plain machined surface: grain and nothing else. **Uniform under any crop.**
+
+    This replaced a `plate()` that drew an outline, a lit bevel and four corner bolts, which is how
+    Create draws a casing -- and which was wrong here for a reason worth writing down.
+
+    Create's andesite casing is a texture on a **cube**. It carries a frame because there is no
+    geometry to carry one. This machine's casing is twenty-five boxes, and every one of them took a
+    whole-face texture and cropped it: the plinth got rows 14-16, a bore strip got columns 1-5, a
+    chamfer got a single pixel. So the outline landed in the middle of some faces and nowhere on
+    others, the bolts turned up wherever a crop happened to cover them, and the block ended up with
+    frames inside frames. All of the structure this block needs -- edges, recesses, sockets, bevels
+    -- is already in the geometry, and Minecraft's directional face shading draws it for free.
+
+    So: textures are material, geometry is structure. Anything drawn *here* has to be information
+    the geometry cannot express -- the octagonal rim of a shaft socket, the jaws of a chuck, the glow
+    at the tip of a die -- and it has to be positioned against something the model guarantees, not
+    against the edge of a 16x16 square that will be cut up.
+    """
+    pixels = canvas(16, 16, tone(SLATE_TONES, base))
+    streak(pixels, 16, 16, SLATE_TONES, base, spread, salt, along=along)
     return pixels
 
 
@@ -170,68 +285,34 @@ def disc(pixels, width, cx, cy, radius, colour):
                 put(pixels, width, x, y, colour)
 
 
+def octagon(x, y, centre=7.5):
+    """Distance from centre on the metric Create's shafts are cut on."""
+    dx, dy = abs(x - centre), abs(y - centre)
+    return max(dx, dy, (dx + dy) * 0.66)
+
+
 def extruder_casing():
     """
     The body's sides.
 
-    Carrying more contrast than a casing strictly needs, because at this size a flat dark panel
-    reads as a painted box however much geometry is behind it: the panel is sunk with a shadowed
-    top-left and a lit bottom-right, there are ribs down its length, and a brass seam across the
-    waist ties the machine to the fluid it burns.
+    Plain. The housing is walls, a floor and a deck, and the model already draws every edge of
+    them; a panel drawn here would only be a second panel inside the first.
     """
-    pixels = canvas(16, 16, SLATE)
-    grain(pixels, 16, 16, 3, 5)
-
-    # A sunk panel: dark where the light does not reach, lit on the far lip.
-    rect(pixels, 16, 3, 3, 13, 13, SLATE_DARK)
-    for i in range(3, 13):
-        put(pixels, 16, i, 3, SLATE_DEEP)
-        put(pixels, 16, 3, i, SLATE_DEEP)
-        put(pixels, 16, i, 12, SLATE_LIGHT)
-        put(pixels, 16, 12, i, SLATE_LIGHT)
-
-    # Ribs across the sunk face, which is what the eye reads as depth at this size.
-    for x in range(5, 12, 3):
-        for y in range(4, 12):
-            put(pixels, 16, x, y, shade(SLATE_DEEP, 6))
-            put(pixels, 16, x + 1, y, shade(SLATE, 4))
-
-    for i in range(16):
-        put(pixels, 16, i, 1, SLATE_LIGHT)
-        put(pixels, 16, 1, i, SLATE_LIGHT)
-        put(pixels, 16, i, 14, SLATE_DARK)
-        put(pixels, 16, 14, i, SLATE_DARK)
-    frame(pixels, 16, 0, 0, 16, 16, SLATE_DEEP)
-
-    for x in range(2, 14):
-        put(pixels, 16, x, 7, shade(BRASS_DARK, noise(x, 7, 11) * 6))
-        put(pixels, 16, x, 8, shade(BRASS, noise(x, 8, 11) * 6))
-
-    bolts(pixels, 16, [(2, 2), (13, 2), (2, 13), (13, 13)], SLATE_DEEP, SLATE_LIGHT)
-    return pixels
+    return material(3, base=0.44, spread=0.34)
 
 
 def extruder_rail():
     """
-    The two-pixel rails that cap the casing top and bottom.
+    The plinth, the deck and the tank walls.
 
-    Sampled as thin horizontal slices, so the design has to survive being cut anywhere: uniform
-    along x, with bolts on a four-pixel pitch and a lit top edge.
+    Darker than the housing, which is the only thing distinguishing it now that neither carries an
+    outline -- and enough, because every edge between them is a change of face direction and
+    Minecraft shades those apart on its own.
+
+    Sampled as thin slices from anywhere in the texture, so the grain runs along the slice rather
+    than across it: that is what keeps a two-pixel cut from turning into a stripe.
     """
-    pixels = canvas(16, 16, SLATE_DARK)
-    grain(pixels, 16, 16, 21, 4)
-    for x in range(16):
-        put(pixels, 16, x, 0, SLATE_LIGHT)
-        put(pixels, 16, x, 15, SLATE_DEEP)
-        if x % 4 == 2:
-            for y in range(16):
-                put(pixels, 16, x, y, SLATE_DEEP)
-                put(pixels, 16, x, y if y % 4 else y, SLATE_DEEP)
-    for x in range(2, 16, 4):
-        for y in range(2, 16, 5):
-            put(pixels, 16, x, y, SLATE_DEEP)
-            put(pixels, 16, x, y - 1, SLATE_LIGHT)
-    return pixels
+    return material(21, base=0.30, spread=0.36, along='x')
 
 
 def extruder_drive():
@@ -246,66 +327,67 @@ def extruder_drive():
     -- which an earlier version did -- the corners of the ring fall *inside* the hole and are thrown
     away, leaving four thin slivers on the flats and a socket that reads as a plain square.
     """
-    pixels = plate(13, panel=False)
+    pixels = material(13, base=0.40, spread=0.30)
     for y in range(16):
         for x in range(16):
-            dx, dy = abs(x - 7.5), abs(y - 7.5)
-            reach = max(dx, dy, (dx + dy) * 0.66)
-            if 2.6 <= reach < 3.6:
-                put(pixels, 16, x, y, SLATE_DEEP)
-            elif 3.6 <= reach < 4.7:
-                put(pixels, 16, x, y, SLATE_LIGHT)
-    bolts(pixels, 16, [(1, 1), (14, 1), (1, 14), (14, 14)], SLATE_DEEP, SLATE_LIGHT)
+            reach = octagon(x, y)
+            if 2.6 <= reach < 3.5:
+                put(pixels, 16, x, y, tone(SLATE_TONES, 0.02))
+            elif 3.5 <= reach < 4.4:
+                put(pixels, 16, x, y, tone(SLATE_TONES, 0.76))
     return pixels
 
 
 def extruder_collar():
+    """The front wall around the chuck. Quiet: the chuck and the barrel are in front of it."""
+    return material(31, base=0.48, spread=0.30)
+
+
+def extruder_chuck():
     """
-    The nozzle's mounting plate. Grey, not brass: the brass is reserved for the spout itself, so
-    the one hot-coloured thing on the machine is the thing that does the work.
+    The chuck: the ring at the front the barrel turns in.
+
+    Steel, not brass. Brass on this machine means *the barrel* -- it is the one part that stands
+    outside the cell and the one part a player reads the front off -- and a brass chuck wrapped
+    around a brass barrel turns the whole business end into one gold smear.
+
+    Only a narrow band of this is ever drawn: the ring runs 3 to 13 with its middle cut out at 4.4,
+    so the jaws are placed on the four flats where that band actually falls. An earlier version put
+    them at the top and bottom centre, where three quarters of each one was inside the hole.
     """
-    pixels = plate(31, panel=False)
-    frame(pixels, 16, 2, 2, 14, 14, SLATE_DEEP)
-    rect(pixels, 16, 3, 3, 13, 13, SLATE_DARK)
-    frame(pixels, 16, 5, 5, 11, 11, SLATE_DEEP)
-    rect(pixels, 16, 6, 6, 10, 10, SLATE)
+    pixels = material(19, base=0.52, spread=0.26)
+
+    for x0, y0, x1, y1 in ((6, 3, 10, 5), (6, 11, 10, 13), (3, 6, 5, 10), (11, 6, 13, 10)):
+        rect(pixels, 16, x0, y0, x1, y1, tone(SLATE_TONES, 0.04))
+        for x in range(x0, x1):
+            put(pixels, 16, x, y0, tone(SLATE_TONES, 0.52))
     return pixels
 
 
 def extruder_shaft():
     """
-    The stub of shaft standing in the back socket.
+    The sides of the shaft stub: a four-pixel column, cross-section across, length down.
 
-    Measured off Create's own, not guessed at. `create:block/shaft.json` is **four** pixels square,
-    from 6 to 10 -- not six -- and its end, `axis_top`, is not a square: the four corner pixels are
-    the darkest in the texture, which chamfers it into an **octagon**. Getting either of those wrong
-    gives a socket that does not line up with the shaft a player butts against it, which is the one
-    thing about a kinetic block nobody will forgive.
-
-    Laid out to serve the two places the model samples it from:
-
-      * the centre four-by-four, which both stub ends read, is the octagonal end of a shaft;
-      * the top and bottom strips, which the stubs' sides read, are the streaks along its length.
-
-    Anything outside those regions is never drawn.
+    Split from the end the way Create splits `axis` from `axis_top`, and for the same reason: with
+    all four sides mapped to one strip there is no room left in the strip for an end as well.
     """
-    pixels = canvas(16, 16, SLATE_DARK)
+    return rod(SLATE_TONES, core=0.80, edge=0.18, salt=73, radius=2.0)
 
-    # The streaks along the length, sampled by the sides of both stubs. Create's `axis` is a column
-    # of irregular vertical stripes; regular banding reads as a screw thread instead of a rod.
-    for strip in (0, 14):
-        for y in range(strip, strip + 2):
-            for x in range(6, 10):
-                shade_of = (SLATE_DEEP, SLATE, SLATE_LIGHT, SLATE_DARK)
-                put(pixels, 16, x, y, shade_of[hash3(x, y, 73) % 4])
 
-    # The end of the shaft: lighter towards the middle, with the corners taken off.
-    rect(pixels, 16, 6, 6, 10, 10, SLATE)
-    put(pixels, 16, 7, 7, SLATE_LIGHT)
-    put(pixels, 16, 8, 8, SLATE_LIGHT)
-    put(pixels, 16, 8, 7, SLATE_LIGHT)
+def extruder_shaft_end():
+    """
+    The end of the shaft stub.
+
+    Measured off Create's own: `create:block/shaft.json` is **four** pixels square, from 6 to 10, and
+    `axis_top` darkens exactly its four corner pixels, which chamfers it into an **octagon**. Getting
+    either wrong gives a socket that does not line up with the shaft a player butts against it.
+    """
+    pixels = canvas(16, 16, tone(SLATE_TONES, 0.30))
+    for y in range(6, 10):
+        for x in range(6, 10):
+            put(pixels, 16, x, y, tone(SLATE_TONES, 0.80 - 0.16 * (x - 6) - 0.06 * (y - 6)))
     for x, y in ((6, 6), (9, 6), (6, 9), (9, 9)):
-        put(pixels, 16, x, y, SLATE_DEEP)
+        put(pixels, 16, x, y, tone(SLATE_TONES, 0.10))
     return pixels
 
 
@@ -314,107 +396,50 @@ def extruder_barrel():
     The core barrel: the heavy tube the rock comes out of.
 
     **Brass**, not steel. The barrel is the one thing on this machine that stands outside the cell
-    and the one thing a player looks at to tell the front from the back, and it was brass in the
-    design this block was chosen from. A grey barrel against a grey casing disappears -- which is
-    what happened when an earlier pass quietly repointed this at the slate palette.
+    and the one thing a player reads the front off, and it was brass in the design this block was
+    chosen from. A grey barrel against a grey casing disappears.
 
-    Banded along its length rather than around it, because the barrel turns about its own axis and
-    bands running the length are the only thing that makes that visible -- the same reason a real
-    drill collar is fluted.
+    Round, so it is shaded across its width. An earlier version banded it every five pixels along
+    its length, which at a five-pixel width meant the whole barrel was stripes.
     """
-    pixels = canvas(16, 16, BRASS)
-    grain(pixels, 16, 16, 61, 5)
-    for x in range(16):
-        band = x % 5
-        if band == 0:
-            rect(pixels, 16, x, 0, x + 1, 16, BRASS_DARK)
-        elif band == 1:
-            rect(pixels, 16, x, 0, x + 1, 16, BRASS_LIGHT)
-        elif band == 3:
-            rect(pixels, 16, x, 0, x + 1, 16, OCHRE)
-    for y in range(0, 16, 6):
-        rect(pixels, 16, 0, y, 16, y + 1, BRASS_DARK)
-    return pixels
+    return rod(BRASS_TONES, core=0.94, edge=0.46, salt=61)
 
 
-def extruder_chuck():
-    """
-    The chuck: the ring at the front that grips the barrel and turns it.
-
-    Steel, not brass. Brass on this machine means *the barrel* -- it is the one part that stands
-    outside the cell and the one part a player reads the front off -- and a brass chuck wrapped
-    around a brass barrel turns the whole business end into one gold smear. Only the middle of this
-    texture is ever drawn; the model cuts the centre out for the barrel to pass through.
-
-    Four jaw slots, because a chuck has jaws and because four notches sweeping past the front of the
-    machine is what makes a ring read as turning rather than painted on.
-    """
-    pixels = plate(19, panel=False)
-    frame(pixels, 16, 1, 1, 15, 15, SLATE_DEEP)
-    rect(pixels, 16, 2, 2, 14, 14, SLATE_DARK)
-    frame(pixels, 16, 2, 2, 14, 14, SLATE_LIGHT)
-    for x0, y0, x1, y1 in ((7, 1, 9, 4), (7, 12, 9, 15), (1, 7, 4, 9), (12, 7, 15, 9)):
-        rect(pixels, 16, x0, y0, x1, y1, SLATE_DEEP)
-        frame(pixels, 16, x0, y0, x1, y1, SLATE)
-    bolts(pixels, 16, [(3, 3), (12, 3), (3, 12), (12, 12)], SLATE_DEEP, SLATE_LIGHT)
-    return pixels
+def extruder_ram():
+    """The drill string: the rod between the shaft socket and the chuck. Plain steel, round."""
+    return rod(SLATE_TONES, core=0.70, edge=0.24, salt=43, radius=3.2)
 
 
 def extruder_substrate():
-    """What the gauge shows: the same umber the fluid is, a shade darker for being seen through glass."""
-    pixels = canvas(16, 16, OCHRE_DARK)
+    """What the tank shows: wet mineral mud, mottled rather than speckled."""
+    pixels = canvas(16, 16, OCHRE_TONES[1])
     for y in range(16):
         for x in range(16):
-            h = hash3(x, y, 51)
-            if h < 60:
-                colour = OCHRE_DEEP
-            elif h < 200:
-                colour = shade(OCHRE_DARK, noise(x, y, 53) * 6)
-            elif h < 246:
-                colour = OCHRE
-            else:
-                colour = EMBER
-            put(pixels, 16, x, y, colour)
+            swirl = (hash3(x // 2, y // 2, 51) / 255.0) * 0.7 + (hash3(x, y, 53) / 255.0) * 0.3
+            put(pixels, 16, x, y, blend(OCHRE_TONES, 0.12 + 0.80 * swirl, x, y))
     return pixels
 
 
 def extruder_die():
     """
-    The business end of the ram: a brass throat stepping down to substrate glowing at the centre.
+    The cutting head: a brass throat with substrate glowing at the centre.
 
-    This is the face that actually enters the block being printed into, so it is the one piece of
-    the machine a player looks straight at.
+    This is the face that enters the block being printed into, so it is the one piece of the machine
+    a player looks straight at, and the only place on it worth spending contrast.
     """
-    pixels = canvas(16, 16, SLATE_DEEP)
-    grain(pixels, 16, 16, 17, 3)
-    frame(pixels, 16, 1, 1, 15, 15, SLATE_DARK)
-    frame(pixels, 16, 2, 2, 14, 14, BRASS_DARK)
-    rect(pixels, 16, 3, 3, 13, 13, SLATE_DARK)
-    frame(pixels, 16, 3, 3, 13, 13, BRASS)
-    rect(pixels, 16, 4, 4, 12, 12, SLATE_DEEP)
-    rect(pixels, 16, 5, 5, 11, 11, OCHRE_DARK)
-    rect(pixels, 16, 6, 6, 10, 10, OCHRE)
-    rect(pixels, 16, 7, 7, 9, 9, EMBER)
-    put(pixels, 16, 7, 7, OCHRE_LIGHT)
-    put(pixels, 16, 8, 8, shade(EMBER, 20))
-    return pixels
-
-
-def extruder_ram():
-    """
-    The drill string: the rod between the shaft socket and the chuck.
-
-    Plain steel. It used to carry brass bands, from back when it was the spine of a ram, and a pixel
-    of it shows through the reveal around the shaft socket -- so those bands read as brass sitting
-    behind the shaft, which is nothing the machine has.
-    """
-    pixels = canvas(16, 16, SLATE_DARK)
-    grain(pixels, 16, 16, 43, 7)
-    for x in range(16):
-        if x % 4 == 0:
-            rect(pixels, 16, x, 0, x + 1, 16, SLATE_DEEP)
-        elif x % 4 == 1:
-            rect(pixels, 16, x, 0, x + 1, 16, SLATE)
+    pixels = canvas(16, 16, tone(SLATE_TONES, 0.2))
+    for y in range(16):
+        for x in range(16):
+            put(pixels, 16, x, y, tone(BRASS_TONES, 0.62 - 0.22 * octagon(x, y) / 8))
+    for y in range(16):
+        for x in range(16):
+            reach = octagon(x, y)
+            if reach < 1.6:
+                put(pixels, 16, x, y, EMBER)
+            elif reach < 2.6:
+                put(pixels, 16, x, y, tone(OCHRE_TONES, 0.78))
+            elif reach < 3.4:
+                put(pixels, 16, x, y, tone(OCHRE_TONES, 0.36))
     return pixels
 
 
@@ -481,6 +506,7 @@ TEXTURES = {
     'block/terraform_extruder_substrate': extruder_substrate,
     'block/terraform_extruder_drive': extruder_drive,
     'block/terraform_extruder_shaft': extruder_shaft,
+    'block/terraform_extruder_shaft_end': extruder_shaft_end,
     'block/terraform_extruder_barrel': extruder_barrel,
     'block/terraform_extruder_chuck': extruder_chuck,
     'block/terraform_extruder_die': extruder_die,
