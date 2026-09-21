@@ -118,7 +118,7 @@ public class ExtruderMovementBehaviour implements MovementBehaviour {
 			return;
 
 		BlockState existing = level.getBlockState(pos);
-		if (!PlacementRules.canOverwrite(existing))
+		if (!PlacementRules.canDisplace(existing))
 			return;
 
 		IFluidHandler tanks = context.contraption.getStorage()

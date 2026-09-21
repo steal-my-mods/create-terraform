@@ -97,14 +97,59 @@ modes that are silent, expensive and easy to reintroduce.
 | `strata/StrataSlice` | A 48×48 Y-slice, filtered and shuffled. The **stationary** path, cut on a worker. |
 | `strata/StrataSignature` | Signature → chunk-aligned displacement. The alignment is load-bearing. |
 | `strata/StrataMemory` | A contraption's signature + printed-coordinate history. The Seismic Shift. |
-| `strata/PlacementRules` | The blacklist, the overwrite rule, and the block-update flags. |
+| `strata/PlacementRules` | The blacklist, the two placement rules, and the block-update flags. |
 | `extruder/TerraformExtruderBlockEntity` | Standing still: core-sample queue, async double buffering, NBT. |
 | `extruder/ExtruderMovementBehaviour` | Moving: Create's `MovementBehaviour`, and the Seismic Shift. |
 | `extruder/ExtruderMountedStorage` | The machine's tank, mounted into a contraption's fluid pool. |
 | `client/TerraformExtruderRenderer` | Spindle and barrel, both on the facing. Phase is read off the world clock and the machine's speed, so nothing is synced for it. |
 | `client/TerraformPartials` | Barrel, spindle and gauge — all up-authored, because that is what Create's orientation transform expects. |
 
+## The two placement rules
+
+**Overwriting is safe exactly when you only visit a coordinate once**, and that is why the two modes
+differ. `PlacementRules` has one rule each and they are not interchangeable:
+
+- **`canPrintInto`** — stationary. Free space only: air, water, grass, snow. It may *not* write over
+  rock, including its own output. A stationary machine returns to the same coordinate forever, so a
+  machine that overwrote there would be racing whatever is consuming what it makes — and consuming
+  what it makes is the entire point of a stationary setup. Three Mechanical Drills on the target
+  block never finished one, because the block they were part-way through breaking kept turning into
+  a different block and their progress went with it. The harvester now sets the pace; the machine
+  waits at `OBSTRUCTED`, which is synced and shows under goggles. One block and stop with nothing
+  attached is correct, not a stall.
+- **`canDisplace`** — moving. Adds `EXTRUDER_REPLACEABLE` (base stone, deepslate, ore). It may
+  overwrite rock because it has the guarantee the stationary machine cannot: `StrataMemory` records
+  every coordinate it prints into and the Seismic Shift fires on a revisit, so it prints and leaves
+  and can never race anything. It also *has* to — confined to empty space it would only work in
+  caves, and painting displaced strata over solid ground is the machine's whole job.
+
+`EXTRUDER_REPLACEABLE` is therefore a **contraption-only** tag; its JSON says so.
+
+A stationary Extruder also refuses a coordinate that still holds an **item entity**, so it cannot
+bury a harvester's drop before a Chute or belt has taken it.
+
+There is deliberately **no fuel surcharge for displacing rock**. Cost scales with blocks produced,
+not with what happened to be there — a surcharge would make the machine cheapest where it does least
+(filling air) and dearest where it is most useful. The anti-exploit is the Seismic Shift, not the
+fuel bill.
+
 ## Things that will bite
+
+- **A block entity whose renderer draws outside its own cell must override
+  `createRenderBoundingBox()`.** The default box is the one block, and anything drawn past it is
+  culled with it — so the barrel vanished the moment the machine's own cell left the view frustum,
+  which is exactly what happens when you walk up to the business end. Create's Deployer inflates by
+  three for the same reason; so do we.
+- **Create's block breakers park and wake on their *lazy* tick.**
+  `BlockBreakingKineticBlockEntity` sets `ticksUntilNextProgress = -1` when there is nothing in
+  front of it and only calls `destroyNextTick()` from `lazyTick()`, which Create runs every ten
+  ticks. A Mechanical Drill aimed at a freshly printed block therefore idles up to half a second
+  unless something tells it — `DrillBlock` overrides `neighborChanged`, so the stationary machine
+  places with `STATIONARY_FLAGS` (neighbour updates included) rather than the suppressed
+  `PLACEMENT_FLAGS` a contraption uses.
+- **Never print on top of an item entity.** A harvester breaking the printed block leaves a drop
+  standing in the space for a moment, and refilling it that tick seals the item inside a solid
+  block — which is why a Chute under the target almost never caught anything.
 
 - **Never pass `level.structureManager()` to a generator stage.** It resolves `getChunk` against the
   real chunk source and deadlocks the server. Always `forWorldGenRegion(region)`.
@@ -272,6 +317,24 @@ modes that are silent, expensive and easy to reintroduce.
   `rotateCentered(angle, Direction.get(POSITIVE, axis))`. Our partials are swung onto the *facing*,
   which is the negative direction for north, west and down, so the angle has to be negated there or
   the machine turns backwards against the shaft driving it. Half of all placements looked wrong.
+- **The interval between placements is a Mechanical Deployer's, to the tick.** Not approximated:
+  `cycleTicks()` is Create's own arithmetic, read out of `DeployerBlockEntity`. Its `timer` counts
+  down by `clamp(|rpm| * 2, 8, 512)` a tick, and one placement is three phases of it — 1000
+  extending, `activate()`, 1000 retracting, 500 waiting. Each phase is ceilinged **separately**,
+  because each is a separate countdown, and summing first comes out a tick short at some speeds. The
+  clamp is what gives the curve its shape: below 4 RPM and above 256 speed stops buying anything,
+  which is why there is no hand-placed floor. Our own interval-at-a-reference-RPM formula ran about
+  twice a Deployer's rate across the whole band. `cycleScale` multiplies it; the interval itself is
+  not configurable, because it is Create's. `theIntervalMatchesADeployer` asserts the hard numbers —
+  16 RPM is 80 ticks, 64 is 20, 256 is 5 — because a monotonic "faster is shorter" check would pass
+  for any formula at all.
+- **A barren core sample backs off rather than waiting flat.** Y is never displaced, so whether a
+  signature finds rock is decided by the height the machine sits at: underground nearly all of them
+  land, at the surface most sample sky and come back empty. A flat `barrenRetryTicks` wait meant a
+  machine placed up top could stand silent through several ten-second waits before its first block.
+  The first retry is half a second and doubles from there; `barrenRetryTicks` is now the ceiling.
+- **The bench rig is pinned to 64 RPM** (`RIG_RPM`). At the creative motor's default 16 RPM one
+  placement is eighty ticks, and every delay in the gametest file was written when it was forty.
 - **The barrel's travel is a lead, not a stroke.** A pixel and a half, derived from the angle of turn
   and nothing else: the barrel is threaded, so turning it walks it. That is what keeps it in step
   with the spin for free, makes it speed up and stop with the shaft, and means it never has to be

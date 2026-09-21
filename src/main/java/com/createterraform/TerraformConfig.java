@@ -23,12 +23,8 @@ public class TerraformConfig {
 	public final ModConfigSpec.IntValue tankCapacity;
 	/** Stress Units an Extruder draws per RPM. */
 	public final ModConfigSpec.DoubleValue stressImpact;
-	/** Ticks between placements at {@link #referenceRpm}. */
-	public final ModConfigSpec.IntValue cycleTicks;
-	/** The RPM {@link #cycleTicks} is quoted at; speed scales the interval from here. */
-	public final ModConfigSpec.IntValue referenceRpm;
-	/** Shortest interval any speed can buy, so a geared-up Extruder cannot print every tick. */
-	public final ModConfigSpec.IntValue minimumCycleTicks;
+	/** Multiplier on the Deployer-derived interval between placements. */
+	public final ModConfigSpec.DoubleValue cycleScale;
 
 	/** Blocks left in a core sample before a stationary Extruder cuts the next one. */
 	public final ModConfigSpec.IntValue sliceLowWaterMark;
@@ -64,18 +60,16 @@ public class TerraformConfig {
 				"Which is why this is not the lever that makes the machine expensive. The recipe and",
 				"the substrate are.")
 			.defineInRange("stressImpact", 4.0, 0.0, 1024.0);
-		cycleTicks = builder
-			.comment("Ticks between placements at the reference RPM below. The real interval is",
-				"cycleTicks * referenceRpm / rpm, so doubling the speed halves the wait.")
-			.defineInRange("cycleTicks", 20, 1, 1200);
-		referenceRpm = builder
-			.comment("The RPM cycleTicks is quoted at.")
-			.defineInRange("referenceRpm", 32, 1, 256);
-		minimumCycleTicks = builder
-			.comment("Shortest interval any amount of speed can buy. Without a floor a geared-up",
-				"Extruder prints every tick, and twenty blocks a second per machine is how a row of",
-				"them takes a server down.")
-			.defineInRange("minimumCycleTicks", 2, 1, 1200);
+		cycleScale = builder
+			.comment("Multiplier on how long an Extruder waits between placements.",
+				"At 1.0 the machine places at exactly a Mechanical Deployer's rate, which is where it",
+				"belongs: on a contraption it already behaves like one, and a stationary Extruder that",
+				"outran a Deployer by a factor of two was the odd machine out on a build made of",
+				"Create's parts. Raise it to slow the machine down, lower it to speed it up.",
+				"The interval itself is not configurable, because it is Create's: see cycleTicks() in",
+				"TerraformExtruderBlockEntity. There is no separate floor -- Create's own clamp on",
+				"timer speed gives one, at five ticks.")
+			.defineInRange("cycleScale", 1.0, 0.05, 20.0);
 		sliceLowWaterMark = builder
 			.comment("Blocks left in a stationary Extruder's core sample before it starts cutting the",
 				"next one on a worker thread. This is the double buffering: while the number is above",
@@ -83,9 +77,13 @@ public class TerraformConfig {
 				"print in the time a survey takes.")
 			.defineInRange("sliceLowWaterMark", 256, 0, 100000);
 		barrenRetryTicks = builder
-			.comment("Ticks a stationary Extruder waits before surveying again after a core sample came",
-				"back with nothing in it. An Extruder above ground samples sky, and without this it",
-				"would spend a worker thread for ever finding that out.")
+			.comment("Longest a stationary Extruder waits before surveying again after a core sample",
+				"came back with nothing printable in it. It is a ceiling, not a fixed wait: the first",
+				"retry is half a second and each further miss doubles it up to this. Y is never",
+				"displaced, so whether a signature finds rock depends on the height the machine sits",
+				"at -- underground nearly every one lands, at the surface most sample sky -- and a flat",
+				"ten-second wait meant a machine placed up top could stand silent through several of",
+				"them before its first block.")
 			.defineInRange("barrenRetryTicks", 200, 20, 24000);
 		builder.pop();
 
@@ -154,16 +152,8 @@ public class TerraformConfig {
 		return read(INSTANCE.stressImpact).floatValue();
 	}
 
-	public static int cycleTicks() {
-		return read(INSTANCE.cycleTicks);
-	}
-
-	public static int referenceRpm() {
-		return read(INSTANCE.referenceRpm);
-	}
-
-	public static int minimumCycleTicks() {
-		return read(INSTANCE.minimumCycleTicks);
+	public static double cycleScale() {
+		return read(INSTANCE.cycleScale);
 	}
 
 	public static int signatureRange() {

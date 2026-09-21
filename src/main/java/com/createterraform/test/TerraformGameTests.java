@@ -14,6 +14,7 @@ import com.createterraform.registry.TerraformBlocks;
 import com.createterraform.registry.TerraformItems;
 import com.createterraform.registry.TerraformFluids;
 import com.createterraform.strata.StrataSignature;
+import com.createterraform.strata.PlacementRules;
 import com.createterraform.strata.StrataMemory;
 import com.createterraform.strata.StrataSlice;
 import com.createterraform.strata.VirtualChunkCache;
@@ -30,7 +31,9 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.level.Level;
@@ -97,6 +100,12 @@ public class TerraformGameTests {
 
 	/** Long enough for the rotation propagator to find the machine and for one cycle to fire. */
 	private static final int SETTLE_TICKS = 10;
+	/**
+	 * What the bench rig is driven at. Pinned rather than left to the motor's default because the
+	 * interval is a Deployer's now: at the default 16 RPM one placement is eighty ticks, and every
+	 * delay in this file was written when it was forty.
+	 */
+	private static final int RIG_RPM = 64;
 
 	/** Comfortably past the low-water mark, so a hand-fed machine does not also go surveying. */
 	private static final int FED_SAMPLE_SIZE = 512;
@@ -246,26 +255,161 @@ public class TerraformGameTests {
 		helper.succeed();
 	}
 
-	/** Throughput is the speed on the gauge: twice the RPM, half the wait, down to the floor. */
+	/**
+	 * The interval is a Mechanical Deployer's, to the tick.
+	 *
+	 * <p>Hard numbers rather than "faster is shorter", because the shape of the curve is the point
+	 * and a monotonic check would pass for any formula at all. Create spends its Deployer's timer at
+	 * {@code clamp(|rpm| * 2, 8, 512)} a tick over three phases of 1000, 1000 and 500 units, so
+	 * sixteen RPM is eighty ticks, sixty-four is twenty, and two hundred and fifty-six is five. The
+	 * clamp at both ends is what makes speed stop buying anything below 4 RPM and above 256, and it
+	 * is why there is no hand-placed floor any more.
+	 */
 	@GameTest(template = "test_rig", timeoutTicks = 200)
-	public static void rotationSetsThePrintingInterval(GameTestHelper helper) {
+	public static void theIntervalMatchesADeployer(GameTestHelper helper) {
 		rig(helper, Direction.EAST);
-		motor(helper, DRIVER).generatedSpeed.setValue(16);
+		helper.runAfterDelay(SETTLE_TICKS,
+			() -> assertInterval(helper, new int[] {16, 64, 256}, new int[] {80, 20, 5}, 0));
+	}
 
+	/** One RPM per step, because the speed has to propagate before the interval means anything. */
+	private static void assertInterval(GameTestHelper helper, int[] rpm, int[] ticks, int index) {
+		if (index == rpm.length) {
+			helper.succeed();
+			return;
+		}
+		motor(helper, DRIVER).generatedSpeed.setValue(rpm[index]);
 		helper.runAfterDelay(SETTLE_TICKS, () -> {
-			int slow = extruder(helper).cycleTicks();
-			motor(helper, DRIVER).generatedSpeed.setValue(32);
+			int actual = extruder(helper).cycleTicks();
+			helper.assertTrue(actual == ticks[index], rpm[index] + " RPM waited " + actual
+				+ " ticks; a Deployer waits " + ticks[index]);
+			assertInterval(helper, rpm, ticks, index + 1);
+		});
+	}
 
-			helper.runAfterDelay(SETTLE_TICKS, () -> {
-				int fast = extruder(helper).cycleTicks();
-				helper.assertTrue(slow > fast,
-					"16 RPM waited " + slow + " ticks and 32 RPM waited " + fast + "; faster must be shorter");
-				helper.assertTrue(fast >= TerraformConfig.minimumCycleTicks(),
-					"the interval floor was breached: " + fast);
+	/**
+	 * A stationary Extruder will not write over rock, including rock it printed itself.
+	 *
+	 * <p>This is the whole difference between the two modes, and the bug it fixes is not subtle:
+	 * three Mechanical Drills on the target block never finished one, because the block they were
+	 * part-way through breaking kept turning into a different block and their progress went with it.
+	 * A stationary machine returns to the same coordinate forever, so overwriting there is racing
+	 * whatever is meant to consume the output.
+	 *
+	 * <p>Stone at the target and deepslate in the sample, so the two are distinguishable and the
+	 * same-block skip cannot mask the result — under the old rule stone is in
+	 * {@code EXTRUDER_REPLACEABLE} and this comes back deepslate.
+	 */
+	@GameTest(template = "test_rig", timeoutTicks = 400)
+	public static void aStationaryExtruderWillNotOverwriteRock(GameTestHelper helper) {
+		rig(helper, Direction.EAST);
+		fill(helper, Integer.MAX_VALUE);
+		feed(helper, Blocks.DEEPSLATE.defaultBlockState());
+		helper.setBlock(TARGET, Blocks.STONE);
+
+		helper.runAfterDelay(SETTLE_TICKS + 160, () -> {
+			TerraformExtruderBlockEntity extruder = extruder(helper);
+			helper.assertBlockPresent(Blocks.STONE, TARGET);
+			helper.assertTrue(extruder.getPrinted() == 0,
+				"a stationary Extruder wrote over rock " + extruder.getPrinted() + " times");
+			helper.assertTrue(extruder.getIdleReason() == ExtruderIdleReason.OBSTRUCTED,
+				"expected OBSTRUCTED against rock, was " + extruder.getIdleReason());
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * ...and starts again the moment something takes the block away.
+	 *
+	 * <p>Which is the loop the machine is for: the harvester sets the pace, not a timer. This is not
+	 * a test of the placement rule — it passes under the old one too, because the same-block skip
+	 * keeps the count still either way — it is a test that waiting at OBSTRUCTED is a pause and not
+	 * a stall.
+	 */
+	@GameTest(template = "test_rig", timeoutTicks = 400)
+	public static void aStationaryExtruderResumesWhenItsOutputIsCleared(GameTestHelper helper) {
+		rig(helper, Direction.EAST);
+		fill(helper, Integer.MAX_VALUE);
+		feed(helper, Blocks.DEEPSLATE.defaultBlockState());
+
+		helper.runAfterDelay(SETTLE_TICKS + 80, () -> {
+			helper.assertBlockPresent(Blocks.DEEPSLATE, TARGET);
+			helper.setBlock(TARGET, Blocks.AIR);
+
+			helper.runAfterDelay(80, () -> {
+				helper.assertBlockPresent(Blocks.DEEPSLATE, TARGET);
+				helper.assertTrue(extruder(helper).getPrinted() == 2,
+					"the Extruder did not print again after its output was cleared: "
+						+ extruder(helper).getPrinted() + " placements");
 				helper.succeed();
 			});
 		});
 	}
+
+	/**
+	 * The machine will not print on top of a dropped item.
+	 *
+	 * <p>A harvester breaking the printed block leaves an item entity standing in the space for a
+	 * moment. Refilling it that same tick seals the item inside a solid block, which is why a Chute
+	 * under the target almost never caught anything — the drop it was waiting for was already buried
+	 * by the time it looked. Waiting a cycle costs nothing, because the machine is gated on the
+	 * harvester regardless.
+	 */
+	@GameTest(template = "test_rig", timeoutTicks = 400)
+	public static void anExtruderWillNotBuryTheDrop(GameTestHelper helper) {
+		rig(helper, Direction.EAST);
+		fill(helper, Integer.MAX_VALUE);
+		feed(helper, Blocks.DEEPSLATE.defaultBlockState());
+
+		helper.runAfterDelay(SETTLE_TICKS + 80, () -> {
+			helper.assertBlockPresent(Blocks.DEEPSLATE, TARGET);
+			helper.setBlock(TARGET, Blocks.AIR);
+
+			BlockPos where = helper.absolutePos(TARGET);
+			ItemEntity drop = new ItemEntity(helper.getLevel(), where.getX() + 0.5, where.getY() + 0.5,
+				where.getZ() + 0.5, new ItemStack(Items.COBBLESTONE));
+			drop.setNoGravity(true);
+			drop.setDeltaMovement(Vec3.ZERO);
+			helper.getLevel()
+				.addFreshEntity(drop);
+
+			helper.runAfterDelay(80, () -> {
+				helper.assertBlockPresent(Blocks.AIR, TARGET);
+				helper.assertTrue(extruder(helper).getIdleReason() == ExtruderIdleReason.OBSTRUCTED,
+					"expected OBSTRUCTED with a drop in the way, was " + extruder(helper).getIdleReason());
+				drop.discard();
+
+				helper.runAfterDelay(80, () -> {
+					helper.assertBlockPresent(Blocks.DEEPSLATE, TARGET);
+					helper.succeed();
+				});
+			});
+		});
+	}
+
+	/**
+	 * The two rules differ on rock, and only on rock.
+	 *
+	 * <p>Stated directly because it is the one invariant the rest of this file cannot see: the
+	 * integration tests above show what a stationary machine does, and no test can practically drive
+	 * a contraption into a wall of stone to show the other half.
+	 */
+	@GameTest(template = "test_rig", timeoutTicks = 100)
+	public static void onlyAMovingExtruderMayDisplaceRock(GameTestHelper helper) {
+		BlockState stone = Blocks.STONE.defaultBlockState();
+		BlockState air = Blocks.AIR.defaultBlockState();
+
+		helper.assertTrue(!PlacementRules.canPrintInto(stone),
+			"a stationary Extruder would overwrite stone, and so would race its own harvester");
+		helper.assertTrue(PlacementRules.canDisplace(stone),
+			"a moving Extruder cannot displace stone, so it would only work in caves");
+		helper.assertTrue(PlacementRules.canPrintInto(air) && PlacementRules.canDisplace(air),
+			"free space is printable either way");
+		helper.assertTrue(!PlacementRules.canDisplace(Blocks.CHEST.defaultBlockState()),
+			"a chest is somebody's belongings and the machine does not get a vote");
+		helper.succeed();
+	}
+
 
 	/**
 	 * A machine at an altitude with no rock in it must say so and stop asking.
@@ -801,6 +945,7 @@ public class TerraformGameTests {
 		helper.setBlock(EXTRUDER, extruderFacing(facing));
 		helper.setBlock(DRIVER, AllBlocks.CREATIVE_MOTOR.getDefaultState()
 			.setValue(BlockStateProperties.FACING, Direction.EAST));
+		motor(helper, DRIVER).generatedSpeed.setValue(RIG_RPM);
 	}
 
 	/**

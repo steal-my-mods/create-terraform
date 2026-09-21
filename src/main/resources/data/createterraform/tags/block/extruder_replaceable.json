@@ -1,5 +1,5 @@
 {
-  "__comment": "What an Extruder may write over, on top of anything already replaceable. The rule is 'the kind of thing an Extruder prints': base stone, deepslate and ore, so a stationary machine can overwrite its own output. A player's stone wall is in here, deliberately -- putting an Extruder against one is a decision.",
+  "__comment": "What a MOVING Extruder may write over, on top of anything already replaceable. Contraptions only: a stationary Extruder prints into free space and nothing else, because it returns to the same coordinate forever and would otherwise race the drill or crusher harvesting its output. A moving one visits each coordinate once -- StrataMemory and the Seismic Shift guarantee it -- so it can displace rock without racing anything, and has to, or it would only work in caves. The rule is 'the kind of thing an Extruder prints': base stone, deepslate and ore. A player's stone wall is in here, deliberately -- driving a contraption through one is a decision.",
   "values": [
     "#minecraft:base_stone_overworld",
     "#minecraft:base_stone_nether",

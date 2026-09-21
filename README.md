@@ -78,7 +78,7 @@ worth knowing about:
 | Setting | Default | What it is |
 | --- | --- | --- |
 | `substratePerBlock` | 100 mB | Fuel per block printed |
-| `cycleTicks` / `referenceRpm` | 20 / 32 | Printing interval, scaled by RPM |
+| `cycleScale` | 1.0 | Multiplier on the printing interval. At 1.0 the machine places at exactly a Mechanical Deployer's rate |
 | `sliceLowWaterMark` | 256 | Blocks left before a stationary machine surveys again |
 | `virtualChunkCacheSize` | 128 | Generated chunks a level keeps for contraptions |
 | `prefetchLookahead` | 24 blocks | How far ahead of a moving contraption to generate early; 0 disables |
@@ -88,6 +88,14 @@ worth knowing about:
 Two block tags decide what an Extruder may print and what it may print over —
 `createterraform:extruder_blacklist` and `createterraform:extruder_replaceable`. Both are meant to be
 edited by datapacks.
+
+`extruder_replaceable` applies to **contraptions only**, and the asymmetry is deliberate. A moving
+Extruder paints over rock, because it visits each coordinate once and then leaves; confined to empty
+space it would only work in caves. A **stationary** Extruder prints into free space and nothing else
+— it returns to the same coordinate forever, so a machine that overwrote there would be racing the
+drill or crusher harvesting its output, and the block being mined would keep turning into a different
+block. So a stationary Extruder prints one block and waits at *Obstructed* until something takes it
+away: the harvester sets the pace.
 
 ## Building
 

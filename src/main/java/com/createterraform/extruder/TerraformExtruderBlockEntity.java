@@ -21,6 +21,8 @@ import com.simibubi.create.foundation.utility.CreateLang;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup.Provider;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -81,6 +83,15 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 	/** Longest a cycle may be stretched to, so a machine crawling at 1 RPM still eventually fires. */
 	private static final int MAX_CYCLE_TICKS = 1200;
 
+	/** How long the first retry after a barren sample waits, doubling from there. */
+	private static final int FIRST_BARREN_RETRY = 10;
+
+	/**
+	 * The three countdowns a Mechanical Deployer spends on one placement, in its own timer units:
+	 * extending, retracting, then waiting. Create's numbers, not ours.
+	 */
+	private static final int[] DEPLOYER_PHASES = {1000, 1000, 500};
+
 	/** Blocks in front the machine works at. Create's Deployer uses the same two. */
 	public static final int REACH = 2;
 
@@ -102,6 +113,13 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 	private CompletableFuture<StrataSlice> pending;
 	/** Ticks to wait before surveying again after a sample came back empty. */
 	private int barrenCooldown;
+	/**
+	 * Consecutive barren samples, which sets how long the next wait is.
+	 *
+	 * <p>Not saved. A machine reloaded next to good rock should try again straight away rather than
+	 * inherit a backoff earned somewhere else.
+	 */
+	private int barrenStreak;
 
 	/** Blocks written since this machine was placed. Diagnostic; not persisted, not synced. */
 	private long printed;
@@ -250,19 +268,50 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 	 * geared-up row of these writes a block per machine per tick, which is not a balance problem so
 	 * much as a tick-time one.
 	 */
+	/**
+	 * Ticks between placements: <b>a Mechanical Deployer's, exactly</b>.
+	 *
+	 * <p>Not approximated — this is Create's own arithmetic, read out of
+	 * {@code DeployerBlockEntity}. Its {@code timer} counts down by
+	 * {@code getTimerSpeed() = clamp(|rpm| * 2, 8, 512)} every tick, and one placement is three
+	 * phases of it: a thousand units extending, {@code activate()}, a thousand retracting, five
+	 * hundred waiting. Each phase is ceilinged separately because each is a separate countdown, and
+	 * summing first would come out a tick short at some speeds.
+	 *
+	 * <p>Doing it this way rather than with our own interval-at-a-reference-RPM formula matters for
+	 * more than parity of the headline number: the clamp is what gives the curve its shape. Below
+	 * 4 RPM speed stops buying anything, and above 256 RPM it stops too, which is why a geared-up
+	 * Extruder cannot print every tick and no separate floor is needed. Our own formula had a
+	 * hand-placed floor and no ceiling on the useful speed, and ran about twice a Deployer's rate
+	 * across the whole band.
+	 */
 	public int cycleTicks() {
 		float rpm = Math.abs(getSpeed());
-		if (rpm < 1.0F)
+		if (rpm == 0.0F)
 			return MAX_CYCLE_TICKS;
-		float ticks = TerraformConfig.cycleTicks() * TerraformConfig.referenceRpm() / rpm;
-		return Mth.clamp(Mth.ceil(ticks), TerraformConfig.minimumCycleTicks(), MAX_CYCLE_TICKS);
+
+		int timerSpeed = (int) Mth.clamp(rpm * 2.0F, 8.0F, 512.0F);
+		int ticks = 0;
+		for (int phase : DEPLOYER_PHASES)
+			ticks += Mth.ceil((float) phase / timerSpeed);
+
+		return Mth.clamp(Mth.ceil(ticks * TerraformConfig.cycleScale()), 1, MAX_CYCLE_TICKS);
 	}
 
 	private void print(ServerLevel serverLevel) {
 		BlockPos target = target();
 		BlockState existing = serverLevel.getBlockState(target);
 
-		if (!PlacementRules.canOverwrite(existing)) {
+		if (!PlacementRules.canPrintInto(existing)) {
+			idleReason = ExtruderIdleReason.OBSTRUCTED;
+			return;
+		}
+		// Do not bury the drop. A harvester breaking the printed block leaves an item entity standing
+		// in the space for a moment, and a machine that refilled it that same tick would seal the item
+		// inside a solid block -- which is why a Chute under the target almost never caught anything.
+		// Waiting a cycle is free: the machine is gated on the harvester anyway.
+		if (!serverLevel.getEntitiesOfClass(ItemEntity.class, new AABB(target))
+			.isEmpty()) {
 			idleReason = ExtruderIdleReason.OBSTRUCTED;
 			return;
 		}
@@ -283,7 +332,7 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 			return;
 
 		drainSubstrate();
-		serverLevel.setBlock(target, strata, PlacementRules.PLACEMENT_FLAGS);
+		serverLevel.setBlock(target, strata, PlacementRules.STATIONARY_FLAGS);
 		printed++;
 		serverLevel.playSound(null, target, strata.getSoundType()
 			.getPlaceSound(), SoundSource.BLOCKS, 0.35F, 0.7F);
@@ -331,10 +380,20 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 		surveys++;
 
 		if (slice.isEmpty()) {
-			barrenCooldown = TerraformConfig.barrenRetryTicks();
+			// Backed off rather than flat, because the flat wait was the whole of "I placed it and
+			// nothing happened". Y is never displaced, so whether a signature finds rock is decided by
+			// the height the machine sits at: underground nearly all of them land, at the surface most
+			// sample sky and come back empty. A machine placed up top could therefore spend several
+			// flat ten-second waits in a row before its first block, in silence.
+			//
+			// So the first retry is a second, and only a machine that keeps missing works its way up
+			// to the configured ceiling. One that is merely unlucky is not punished for it.
+			barrenStreak = Math.min(barrenStreak + 1, 8);
+			barrenCooldown = Math.min(TerraformConfig.barrenRetryTicks(), FIRST_BARREN_RETRY << barrenStreak);
 			idleReason = ExtruderIdleReason.BARREN;
 			return;
 		}
+		barrenStreak = 0;
 		acceptSample(slice);
 	}
 
@@ -347,6 +406,21 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 	 * through. Reaching only one block would make this the odd machine out, and would leave nowhere
 	 * for the ram to be seen moving.
 	 */
+	/**
+	 * The machine plus everything its barrel reaches, which is what gets frustum-culled together.
+	 *
+	 * <p>Without this the box is the machine's own cell, and the barrel — which stands most of a
+	 * block outside it — vanishes the moment that cell leaves the view frustum. Walking up to the
+	 * business end is exactly when that happens, so the tube disappeared precisely when a player was
+	 * looking at it. Create's Deployer overrides this for the same reason and with the same number:
+	 * its hand reaches two blocks and it inflates by three.
+	 */
+	@Override
+	protected AABB createRenderBoundingBox() {
+		return super.createRenderBoundingBox()
+			.inflate(3);
+	}
+
 	public BlockPos target() {
 		return worldPosition.relative(getFacing(), REACH);
 	}
