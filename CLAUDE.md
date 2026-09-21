@@ -259,6 +259,16 @@ fuel bill.
 - **Dither at a boundary, never over a surface.** The style guide's words are "the overuse of
   dithering where the transition starts, covering too much surface area". A pass that blanketed
   `blend()` over every face put a checkerboard on the whole machine.
+- **The renderer applies per-element rotation, and has to.** Models lean on it far more than they
+  look like they do: Create's Mechanical Pump has forty-nine rotated elements and its Mechanical
+  Press fifteen. A renderer without it does not fail, it quietly draws every one of them square, so
+  a press comes out looking like a furnace. A rotated face keeps the shade of the direction it was
+  *declared* in rather than the one it now points, which is what the game does too.
+- **An item's icon is drawn from its model's own `display.gui` rotation**, not from a camera chosen
+  here, so a picture of an item and the item in an inventory cannot disagree. `minecraft:block/block`
+  hands down `[30, 225, 0]`, which shows a block's **north and east** faces. This casing is authored
+  facing **south**, so the Extruder's inventory icon was the back of the machine: a plain plate with
+  a shaft socket and no barrel in sight. The item model overrides it to `[30, 315, 0]`.
 - **Models are generated, not hand-authored.** `tools/generate_models.py` drops every face that is
   buried inside another box, which is the only practical defence against z-fighting across a dozen
   boxes — the shimmering checkerboard only shows up once the block is in the world. Do not hand-edit

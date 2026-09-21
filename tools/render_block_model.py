@@ -269,26 +269,61 @@ class View:
 # obvious on the block: the north face's u runs *backwards* along x, and every
 # vertical face's v runs downwards from the top of the sheet, which is why "the
 # counter's band is rows 4 and 5" is a fact about the element's y and not a choice.
+def spun(point, spin):
+    """
+    Wraps a face's point function in Minecraft's per-element rotation.
+
+    Up to forty-five degrees about one axis through a named origin, which models lean on far more
+    than they look like they do: Create's Mechanical Pump has forty-nine rotated elements and its
+    Mechanical Press fifteen. A renderer that ignores this does not fail, it quietly draws every one
+    of them square, which is how a press comes out looking like a furnace.
+
+    The face keeps the shade of the direction it was *declared* in rather than of the direction it
+    now points, because that is what the game does too.
+    """
+    origin_x, origin_y, origin_z = spin.get('origin', (8.0, 8.0, 8.0))
+    axis = spin.get('axis', 'y')
+    angle = math.radians(spin.get('angle', 0.0))
+    cosine, sine = math.cos(angle), math.sin(angle)
+    # `rescale` stretches the two axes across the rotation so a tilted element still meets its
+    # neighbours, which is what it is for on a fence post or a lever.
+    stretch = (1.0 / math.cos(angle)) if (spin.get('rescale') and angle) else 1.0
+
+    def turned(s, t):
+        x, y, z = point(s, t)
+        dx, dy, dz = x - origin_x, y - origin_y, z - origin_z
+        if axis == 'x':
+            dy, dz = (dy * cosine - dz * sine) * stretch, (dy * sine + dz * cosine) * stretch
+        elif axis == 'z':
+            dx, dy = (dx * cosine - dy * sine) * stretch, (dx * sine + dy * cosine) * stretch
+        else:
+            dx, dz = (dx * cosine + dz * sine) * stretch, (-dx * sine + dz * cosine) * stretch
+        return origin_x + dx, origin_y + dy, origin_z + dz
+
+    return turned
+
+
 def face_geometry(box, name):
     (x1, y1, z1), (x2, y2, z2) = box['from'], box['to']
+    spin = box.get('rotation')
     if name == 'north':
-        return (lambda s, t: (x2 + s * (x1 - x2), y2 + t * (y1 - y2), z1),
-                (16 - x2, 16 - y2, 16 - x1, 16 - y1))
+        point, uv = lambda s, t: (x2 + s * (x1 - x2), y2 + t * (y1 - y2), z1), (16 - x2, 16 - y2, 16 - x1, 16 - y1)
+        return (spun(point, spin) if spin else point), uv
     if name == 'south':
-        return (lambda s, t: (x1 + s * (x2 - x1), y2 + t * (y1 - y2), z2),
-                (x1, 16 - y2, x2, 16 - y1))
+        point, uv = lambda s, t: (x1 + s * (x2 - x1), y2 + t * (y1 - y2), z2), (x1, 16 - y2, x2, 16 - y1)
+        return (spun(point, spin) if spin else point), uv
     if name == 'west':
-        return (lambda s, t: (x1, y2 + t * (y1 - y2), z1 + s * (z2 - z1)),
-                (z1, 16 - y2, z2, 16 - y1))
+        point, uv = lambda s, t: (x1, y2 + t * (y1 - y2), z1 + s * (z2 - z1)), (z1, 16 - y2, z2, 16 - y1)
+        return (spun(point, spin) if spin else point), uv
     if name == 'east':
-        return (lambda s, t: (x2, y2 + t * (y1 - y2), z2 + s * (z1 - z2)),
-                (16 - z2, 16 - y2, 16 - z1, 16 - y1))
+        point, uv = lambda s, t: (x2, y2 + t * (y1 - y2), z2 + s * (z1 - z2)), (16 - z2, 16 - y2, 16 - z1, 16 - y1)
+        return (spun(point, spin) if spin else point), uv
     if name == 'up':
-        return (lambda s, t: (x1 + s * (x2 - x1), y2, z1 + t * (z2 - z1)),
-                (x1, z1, x2, z2))
+        point, uv = lambda s, t: (x1 + s * (x2 - x1), y2, z1 + t * (z2 - z1)), (x1, z1, x2, z2)
+        return (spun(point, spin) if spin else point), uv
     if name == 'down':
-        return (lambda s, t: (x1 + s * (x2 - x1), y1, z2 + t * (z1 - z2)),
-                (x1, 16 - z2, x2, 16 - z1))
+        point, uv = lambda s, t: (x1 + s * (x2 - x1), y1, z2 + t * (z1 - z2)), (x1, 16 - z2, x2, 16 - z1)
+        return (spun(point, spin) if spin else point), uv
     raise ValueError(name)
 
 

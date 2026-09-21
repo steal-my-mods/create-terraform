@@ -251,7 +251,8 @@ def subject_art(subject, mass, box):
         # square, which is the one thing generate_logo.py exists to avoid as well.
         return sprite(subject['sprite'], max(1, int(scale)))
 
-    camera = render_block_model.ANGLES['iso']
+    with open(subject['model']) as handle:
+        camera = camera_for(gui_rotation(json.load(handle)))
     span_width, span_height = model_extent(subject['model'], camera)
     size = min(mass / math.sqrt(span_width * span_height),
                limit_width / span_width, limit_height / span_height)
@@ -606,7 +607,7 @@ class Sprites:
             sheets[value] = pixels
 
         model = {'textures': textures, 'elements': elements}
-        camera = render_block_model.ANGLES['iso']
+        camera = camera_for(gui_rotation(chain[0]))
         span_width, span_height = extent_of(model, camera)
         return render_block_model.render_model(
             model, int(round(min(size / span_width, size / span_height))),
@@ -654,7 +655,8 @@ class Sprites:
         if not os.path.exists(local_model):
             local_model = os.path.join(MODELS, name + '.json')
         if namespace == 'createterraform' and os.path.exists(local_model):
-            camera = render_block_model.ANGLES['iso']
+            with open(local_model) as handle:
+                camera = camera_for(gui_rotation(json.load(handle)))
             span_width, span_height = model_extent(local_model, camera)
             art = render_block_model.render(
                 local_model, int(round(min(size / span_width, size / span_height))), None, camera)
@@ -690,6 +692,34 @@ class Sprites:
 
         self.cache[identifier] = (size, art)
         return art
+
+
+#: What minecraft:block/block hands every block that does not override it.
+DEFAULT_GUI_ROTATION = (30.0, 225.0, 0.0)
+
+
+def camera_for(rotation):
+    """
+    The camera direction that reproduces a model's GUI rotation.
+
+    A display transform turns the model and looks at it down -Z; an orthographic camera leaves the
+    model where it is and moves instead. Same picture, and this is the conversion.
+
+    It matters because a model may override the rotation, and this mod's does: the casing is
+    authored facing south, and vanilla's default shows a block's north and east faces, so the
+    Extruder's icon was the back of the machine. Reading the model's own value rather than naming a
+    camera here is what keeps the page and the inventory showing the same side of it.
+    """
+    pitch, yaw = math.radians(rotation[0]), math.radians(rotation[1])
+    return (-math.sin(yaw), math.tan(pitch) if pitch else 0.0, math.cos(yaw))
+
+
+def gui_rotation(model):
+    """A model's GUI rotation, or the one its vanilla parent would have given it."""
+    display = (model or {}).get('display') or {}
+    gui = display.get('gui') or {}
+    rotation = gui.get('rotation')
+    return tuple(rotation) if rotation else DEFAULT_GUI_ROTATION
 
 
 def cube_model(reference):
