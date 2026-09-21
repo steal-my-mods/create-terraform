@@ -247,21 +247,42 @@ def dot(a, b):
 class View:
     """The screen basis: right, up and towards-the-camera, from one camera direction."""
 
-    def __init__(self, size, camera=CAMERA):
-        self.size = size
+    def __init__(self, size, camera=CAMERA, pad=0):
         self.towards = normalise(camera)
         self.right = normalise(cross((0.0, 1.0, 0.0), self.towards))
         self.up = normalise(cross(self.towards, self.right))
-        # A block is 16 units across and its longest diagonal is 16*sqrt(3); fitting
-        # that leaves a margin at every rotation, so nothing is ever clipped.
+        # A block is 16 units across and its longest diagonal is 16*sqrt(3). The scale stays tied to
+        # `size` and not to the padded canvas, so a caller that sized two models against each other
+        # still gets them at the same scale.
         self.scale = size / (16.0 * math.sqrt(3.0) * 1.08)
+        # ...and `pad` grows the canvas around that, for a model that reaches outside its own cell.
+        # Plenty do: this mod's barrel runs to z=31 and Create's Mechanical Press stands above y=16.
+        # Without it they are not scaled down, they are simply cut off at the cell boundary, which
+        # is what cropped the front off the Extruder and the top off the Press.
+        self.size = size + 2 * pad
+        self.centre = self.size / 2.0
 
     def project(self, point):
-        """A model-space point (0..16 per axis) to (x, y, depth) in pixels."""
+        """A model-space point (0..16 per axis, or outside it) to (x, y, depth) in pixels."""
         offset = (point[0] - 8.0, point[1] - 8.0, point[2] - 8.0)
-        return (self.size / 2.0 + dot(offset, self.right) * self.scale,
-                self.size / 2.0 - dot(offset, self.up) * self.scale,
+        return (self.centre + dot(offset, self.right) * self.scale,
+                self.centre - dot(offset, self.up) * self.scale,
                 dot(offset, self.towards))
+
+    @staticmethod
+    def fitting(size, camera, model):
+        """A view whose canvas is big enough for every corner the model actually has."""
+        probe = View(size, camera)
+        overflow = 0.0
+        for corner in corners_of(model):
+            x, y, _ = probe.project(corner)
+            overflow = max(overflow, -x, -y, x - size, y - size)
+        if overflow <= 0:
+            return probe
+        # Rounded up to a whole oversampled pixel, so the canvas still divides exactly when it is
+        # downsampled and the render does not lose its last row.
+        pad = int(math.ceil((overflow + 1) / OVERSAMPLE)) * OVERSAMPLE
+        return View(size, camera, pad=pad)
 
 
 # The corner of a face at (s, t), and the texture rectangle it maps to, restated
@@ -269,6 +290,35 @@ class View:
 # obvious on the block: the north face's u runs *backwards* along x, and every
 # vertical face's v runs downwards from the top of the sheet, which is why "the
 # counter's band is rows 4 and 5" is a fact about the element's y and not a choice.
+def turn(point, spin):
+    """One model-space point through an element's rotation."""
+    origin_x, origin_y, origin_z = spin.get('origin', (8.0, 8.0, 8.0))
+    axis = spin.get('axis', 'y')
+    angle = math.radians(spin.get('angle', 0.0))
+    cosine, sine = math.cos(angle), math.sin(angle)
+    stretch = (1.0 / math.cos(angle)) if (spin.get('rescale') and angle) else 1.0
+
+    dx, dy, dz = point[0] - origin_x, point[1] - origin_y, point[2] - origin_z
+    if axis == 'x':
+        dy, dz = (dy * cosine - dz * sine) * stretch, (dy * sine + dz * cosine) * stretch
+    elif axis == 'z':
+        dx, dy = (dx * cosine - dy * sine) * stretch, (dx * sine + dy * cosine) * stretch
+    else:
+        dx, dz = (dx * cosine + dz * sine) * stretch, (-dx * sine + dz * cosine) * stretch
+    return origin_x + dx, origin_y + dy, origin_z + dz
+
+
+def corners_of(model):
+    """Every corner of every element, rotation included. What a canvas has to hold."""
+    for box in model.get('elements', []):
+        (x1, y1, z1), (x2, y2, z2) = box['from'], box['to']
+        spin = box.get('rotation')
+        for x in (x1, x2):
+            for y in (y1, y2):
+                for z in (z1, z2):
+                    yield turn((x, y, z), spin) if spin else (x, y, z)
+
+
 def spun(point, spin):
     """
     Wraps a face's point function in Minecraft's per-element rotation.
@@ -281,24 +331,8 @@ def spun(point, spin):
     The face keeps the shade of the direction it was *declared* in rather than of the direction it
     now points, because that is what the game does too.
     """
-    origin_x, origin_y, origin_z = spin.get('origin', (8.0, 8.0, 8.0))
-    axis = spin.get('axis', 'y')
-    angle = math.radians(spin.get('angle', 0.0))
-    cosine, sine = math.cos(angle), math.sin(angle)
-    # `rescale` stretches the two axes across the rotation so a tilted element still meets its
-    # neighbours, which is what it is for on a fence post or a lever.
-    stretch = (1.0 / math.cos(angle)) if (spin.get('rescale') and angle) else 1.0
-
     def turned(s, t):
-        x, y, z = point(s, t)
-        dx, dy, dz = x - origin_x, y - origin_y, z - origin_z
-        if axis == 'x':
-            dy, dz = (dy * cosine - dz * sine) * stretch, (dy * sine + dz * cosine) * stretch
-        elif axis == 'z':
-            dx, dy = (dx * cosine - dy * sine) * stretch, (dx * sine + dy * cosine) * stretch
-        else:
-            dx, dz = (dx * cosine + dz * sine) * stretch, (-dx * sine + dz * cosine) * stretch
-        return origin_x + dx, origin_y + dy, origin_z + dz
+        return turn(point(s, t), spin)
 
     return turned
 
@@ -452,8 +486,8 @@ def render_model(model, size, textures_dir=None, camera=CAMERA, lit=0, dim=0,
     the bottom as well as on the flanks it belongs to.
     """
     internal = size * OVERSAMPLE
-    view = View(internal, camera)
-    canvas = Canvas(internal)
+    view = View.fitting(internal, camera, model)
+    canvas = Canvas(view.size)
 
     supplied = sheets or {}
     loaded = {}

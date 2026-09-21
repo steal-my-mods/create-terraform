@@ -259,6 +259,14 @@ fuel bill.
 - **Dither at a boundary, never over a surface.** The style guide's words are "the overuse of
   dithering where the transition starts, covering too much surface area". A pass that blanketed
   `blend()` over every face put a checkerboard on the whole machine.
+- **The render canvas grows to fit the model, rather than assuming a 16-unit cell.** `View` scales
+  to the cell's diagonal, which is right, but the canvas used to be that size too, so anything
+  reaching outside `0..16` was simply cut off at the boundary. Plenty of models do reach outside:
+  this mod's barrel runs to z=31 and Create's Mechanical Press stands above y=16, which is what
+  cropped the front off the Extruder and the top off the Press. `View.fitting` pads the canvas by
+  the overflow, rounded to a whole oversampled pixel so the downsample still divides. The *scale*
+  stays tied to the requested size, so a caller that sized two models against each other still gets
+  them at the same scale.
 - **The renderer applies per-element rotation, and has to.** Models lean on it far more than they
   look like they do: Create's Mechanical Pump has forty-nine rotated elements and its Mechanical
   Press fifteen. A renderer without it does not fail, it quietly draws every one of them square, so

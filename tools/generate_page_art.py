@@ -206,13 +206,9 @@ def model_extent(path, camera):
     with open(path) as handle:
         model = json.load(handle)
     view = render_block_model.View(1.0, camera)
-    points = []
-    for box in model['elements']:
-        (x1, y1, z1), (x2, y2, z2) = box['from'], box['to']
-        for x in (x1, x2):
-            for y in (y1, y2):
-                for z in (z1, z2):
-                    points.append(view.project((x, y, z)))
+    # Corners through the renderer's own walker, so a rotated element is measured where it ends up
+    # rather than where it was declared. Measuring the declared box understates a model that leans.
+    points = [view.project(corner) for corner in render_block_model.corners_of(model)]
     xs = [point[0] for point in points]
     ys = [point[1] for point in points]
     return max(xs) - min(xs), max(ys) - min(ys)
@@ -747,13 +743,9 @@ def opaque_span(pixels):
 def extent_of(model, camera):
     """model_extent, for a model already in hand."""
     view = render_block_model.View(1.0, camera)
-    points = []
-    for box in model['elements']:
-        (x1, y1, z1), (x2, y2, z2) = box['from'], box['to']
-        for x in (x1, x2):
-            for y in (y1, y2):
-                for z in (z1, z2):
-                    points.append(view.project((x, y, z)))
+    # Corners through the renderer's own walker, so a rotated element is measured where it ends up
+    # rather than where it was declared. Measuring the declared box understates a model that leans.
+    points = [view.project(corner) for corner in render_block_model.corners_of(model)]
     xs = [point[0] for point in points]
     ys = [point[1] for point in points]
     return max(xs) - min(xs), max(ys) - min(ys)

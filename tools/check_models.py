@@ -174,7 +174,16 @@ def main():
     roots = [pathlib.Path(a) for a in sys.argv[1:]] or [ROOT / NAMESPACE / 'models' / 'block']
     for root in roots:
         for path in sorted(root.rglob('*.json')):
-            model = json.loads(path.read_text())
+            try:
+                model = json.loads(path.read_text())
+            except ValueError:
+                continue
+            # A directory named on the command line may hold JSON that is not a model at all --
+            # point this at /tmp and it will find plenty -- so anything not shaped like one is
+            # skipped rather than crashed on. Checked once here rather than in each check.
+            if not isinstance(model, dict) or not isinstance(model.get('textures', {}), dict) \
+                    or not isinstance(model.get('elements', []), list):
+                continue
             checked += 1
             faults += texture_faults(path, model)
             faults += zfight_faults(path, model)
