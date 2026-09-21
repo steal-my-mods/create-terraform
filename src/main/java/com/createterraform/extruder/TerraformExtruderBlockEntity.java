@@ -99,7 +99,6 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 
 	private int timer;
 	private ExtruderIdleReason idleReason = ExtruderIdleReason.NO_ROTATION;
-	private BlockState lastPrinted = Blocks.AIR.defaultBlockState();
 
 	/**
 	 * The core sample, spent from the end. An {@link ArrayList} rather than a deque because removing
@@ -134,7 +133,6 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 
 	/** What the client was last told, so the lazy sync sends a packet only when something moved. */
 	private ExtruderIdleReason sentIdleReason;
-	private BlockState sentLastPrinted;
 
 	public TerraformExtruderBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
@@ -207,10 +205,6 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 
 	public ExtruderIdleReason getIdleReason() {
 		return idleReason;
-	}
-
-	public BlockState getLastPrinted() {
-		return lastPrinted;
 	}
 
 	/**
@@ -326,7 +320,6 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 
 		idleReason = ExtruderIdleReason.NONE;
 		BlockState strata = sample.remove(sample.size() - 1);
-		lastPrinted = strata;
 		setChanged();
 		if (strata == existing)
 			return;
@@ -457,10 +450,11 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 		super.lazyTick();
 		if (level == null || level.isClientSide)
 			return;
-		if (idleReason == sentIdleReason && lastPrinted == sentLastPrinted)
+		// Only the idle reason crosses the wire now. It used to carry the last block printed as well,
+		// which meant a packet on almost every placement to feed a tooltip line nobody needed.
+		if (idleReason == sentIdleReason)
 			return;
 		sentIdleReason = idleReason;
-		sentLastPrinted = lastPrinted;
 		sendData();
 	}
 
@@ -469,11 +463,6 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 		super.write(tag, registries, clientPacket);
 		tag.putInt("IdleReason", idleReason.ordinal());
 		tag.putInt("Timer", timer);
-		tag.put("LastPrinted", NbtUtils.writeBlockState(lastPrinted));
-		// The client is shown a number, not a pool: the overlay wants "1,842 blocks left", and
-		// syncing the states themselves would put a couple of thousand of them on the wire every
-		// time anything about the machine changed.
-		tag.putInt("SampleSize", sample.size());
 		if (!clientPacket) {
 			tag.putInt("SampleY", sampleY);
 			tag.put("Sample", writeSample());
@@ -485,20 +474,12 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 		super.read(tag, registries, clientPacket);
 		idleReason = ExtruderIdleReason.byOrdinal(tag.getInt("IdleReason"));
 		timer = tag.getInt("Timer");
-		// The built-in registry rather than the level's: blocks are not a datapack registry, and
-		// this is read on the client too, where the level lookup would be the wrong one to reach for.
-		lastPrinted = tag.contains("LastPrinted")
-			? NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), tag.getCompound("LastPrinted"))
-			: Blocks.AIR.defaultBlockState();
-		clientSampleSize = tag.getInt("SampleSize");
 		if (!clientPacket) {
 			sampleY = tag.contains("SampleY") ? tag.getInt("SampleY") : Integer.MIN_VALUE;
 			readSample(tag.getCompound("Sample"));
 		}
 	}
 
-	/** What the client last heard about {@link #sample}'s size. Display only. */
-	private int clientSampleSize;
 
 	/**
 	 * A core sample as a palette and a run of counts rather than a list of states.
@@ -544,54 +525,23 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 
 	@Override
 	public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
-		TerraformLang.translate("tooltip.terraform_extruder.title")
-			.forGoggles(tooltip);
+		// Create's own fluid line, and no title above it. That is a Spout's entire overlay -- header,
+		// fluid, amount over capacity -- and a title of ours on top would be a second header saying
+		// what the first one already frames. A Deployer has a title because it has no tank to name it.
+		containedFluidTooltip(tooltip, isPlayerSneaking, tank.getPrimaryHandler());
 
-		TerraformLang.translate("tooltip.terraform_extruder.substrate")
-			.style(ChatFormatting.GRAY)
-			.forGoggles(tooltip, 1);
-		CreateLang.number(tank.getPrimaryHandler()
-			.getFluidAmount())
-			.translate("generic.unit.millibuckets")
-			.text(" / ")
-			.add(CreateLang.number(tank.getPrimaryHandler()
-				.getCapacity())
-				.translate("generic.unit.millibuckets"))
-			.style(ChatFormatting.AQUA)
-			.forGoggles(tooltip, 2);
-
-		TerraformLang.translate("tooltip.terraform_extruder.sample")
-			.style(ChatFormatting.GRAY)
-			.forGoggles(tooltip, 1);
-		CreateLang.number(level != null && level.isClientSide ? clientSampleSize : sample.size())
-			.style(ChatFormatting.GOLD)
-			.forGoggles(tooltip, 2);
-
-		if (idleReason == ExtruderIdleReason.NONE) {
-			TerraformLang.translate("tooltip.terraform_extruder.interval")
-				.style(ChatFormatting.GRAY)
-				.forGoggles(tooltip, 1);
-			CreateLang.number(20.0 / cycleTicks())
-				.text("/s")
-				.style(ChatFormatting.GREEN)
-				.forGoggles(tooltip, 2);
-
-			if (!lastPrinted.isAir()) {
-				TerraformLang.translate("tooltip.terraform_extruder.last")
-					.style(ChatFormatting.GRAY)
-					.forGoggles(tooltip, 1);
-				CreateLang.blockName(lastPrinted)
-					.style(ChatFormatting.GOLD)
-					.forGoggles(tooltip, 2);
-			}
-		} else {
+		// And a status line only when something is wrong; a working machine says so by turning.
+		// Earlier versions also quoted the core sample's remaining size, the blocks-per-second and the
+		// last block printed, which is bookkeeping rather than anything a player acts on, and it
+		// buried the one line that matters.
+		if (idleReason != ExtruderIdleReason.NONE)
 			TerraformLang.translate(idleReason.translationKey())
 				.style(ChatFormatting.RED)
 				.forGoggles(tooltip, 1);
-		}
 
-		// Create's stress lines go underneath; the return says this block filled the overlay, which
-		// it has whether or not there was any stress worth quoting.
+		// Always true, where a Spout returns whatever the fluid helper did: its overlay is the tank
+		// and nothing else, so an absent tank means nothing to draw. Ours still has a status line to
+		// show, and an Extruder that has just run dry is exactly when a player goes looking for it.
 		super.addToGoggleTooltip(tooltip, isPlayerSneaking);
 		return true;
 	}

@@ -317,6 +317,20 @@ fuel bill.
   `rotateCentered(angle, Direction.get(POSITIVE, axis))`. Our partials are swung onto the *facing*,
   which is the negative direction for north, west and down, so the angle has to be negated there or
   the machine turns backwards against the shaft driving it. Half of all placements looked wrong.
+- **The goggle overlay is a Spout's, plus a status line.** `containedFluidTooltip` and nothing above
+  it — that helper already draws its own header ("Fluid Container Info:"), so a title of ours would
+  be a second header saying what the first one frames. A Deployer has a title because it has no tank
+  to name it; Create's Drill, Press and Mixer add nothing at all beyond speed and stress. The status
+  line shows only when something is wrong, because a working machine says so by turning. We return
+  `true` where a Spout returns the helper's own boolean: its overlay is the tank and nothing else, so
+  an absent tank means nothing to draw, whereas an Extruder that has just run dry is exactly when
+  somebody goes looking at it.
+
+  An earlier version also quoted the core sample's remaining size, the blocks-per-second and the last
+  block printed. That is bookkeeping rather than anything a player acts on, and it buried the one
+  line that matters. Both `lastPrinted` and `clientSampleSize` existed only to feed it, and
+  `lastPrinted` was synced — a packet on almost every placement for a line nobody needed. Only
+  `idleReason` crosses the wire now.
 - **The interval between placements is a Mechanical Deployer's, to the tick.** Not approximated:
   `cycleTicks()` is Create's own arithmetic, read out of `DeployerBlockEntity`. Its `timer` counts
   down by `clamp(|rpm| * 2, 8, 512)` a tick, and one placement is three phases of it — 1000
