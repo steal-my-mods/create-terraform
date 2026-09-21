@@ -14,6 +14,7 @@ Minecraft 1.21.1, NeoForge 21.1.248, Create 6.0.11. Java 21. Mod id `createterra
 python3 tools/generate_textures.py    # every texture the mod ships
 python3 tools/generate_structures.py  # the GameTest structure template
 python3 tools/generate_logo.py        # the mod badge
+python3 tools/generate_page_art.py    # branding/: the banner and a sheet per recipe
 python3 tools/generate_models.py      # blockstate, casing models, partials, item model
 python3 tools/check_models.py         # block models: missing textures, holes in the block boundary
 python3 tools/preview_machine.py -o /tmp/rig.json   # the whole machine, mud included
