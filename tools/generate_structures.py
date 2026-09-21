@@ -12,7 +12,8 @@ client is what keeps the tests runnable from a clean checkout.
 Default output root is src/main/resources/data/createterraform/structure.
 """
 
-import gzip
+import struct
+import zlib
 import os
 import struct
 import sys
@@ -78,14 +79,36 @@ STRUCTURES = {
 }
 
 
+def gzip_bytes(payload):
+    """
+    A gzip container assembled by hand, because `gzip.compress` is not reproducible across Python
+    versions.
+
+    Setting `mtime=0` is necessary but not sufficient. Two more header bytes carry values the
+    standard library picks for itself -- XFL (byte 8) and OS (byte 9) -- and what it picks has
+    changed between releases, because `gzip.compress` was reimplemented on top of `zlib.compress`
+    rather than `GzipFile`. So the same payload, written by the same script, came out byte-different
+    on a runner with a different Python than the machine that committed it, and CI failed a
+    generated-asset check that was working exactly as intended.
+
+    Writing the ten header bytes and the eight trailer bytes here leaves only the raw deflate stream
+    to zlib, which is the same thing `write_png` in generate_textures.py has always relied on.
+    """
+    body = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+    deflated = body.compress(payload) + body.flush()
+    header = b'\x1f\x8b\x08\x00' + b'\x00\x00\x00\x00' + b'\x02\xff'
+    trailer = struct.pack('<II', zlib.crc32(payload) & 0xFFFFFFFF, len(payload) & 0xFFFFFFFF)
+    return header + deflated + trailer
+
+
 def main():
     root = sys.argv[1] if len(sys.argv) > 1 else 'src/main/resources/data/createterraform/structure'
     for key, size in STRUCTURES.items():
         path = os.path.join(root, key + '.nbt')
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        # mtime=0 so the gzip header is byte-identical between runs and a re-run is a no-op in git.
+        # Byte-identical between runs *and between machines*, so a re-run is a no-op in git.
         with open(path, 'wb') as handle:
-            handle.write(gzip.compress(structure(*size), mtime=0))
+            handle.write(gzip_bytes(structure(*size)))
         print('wrote', path, '(%dx%dx%d)' % size)
 
 
