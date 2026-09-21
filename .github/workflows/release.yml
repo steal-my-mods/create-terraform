@@ -2,10 +2,8 @@ name: Release
 
 # Tag a release and this uploads it: `git tag v0.1.0 && git push origin v0.1.0`.
 #
-# GITHUB_TOKEN is provided by Actions. CurseForge is not a destination until
-# `curseforge_project_id` is filled in in gradle.properties and CURSEFORGE_TOKEN is set as a
-# repository secret -- until then build.gradle omits that destination entirely, deliberately, so a
-# release cannot half-publish.
+# Needs one repository secret you create yourself, CURSEFORGE_TOKEN; GITHUB_TOKEN is provided by
+# Actions. `curseforge_project_id` must be filled in in gradle.properties.
 #
 # Run it by hand (workflow_dispatch) and it rehearses by default -- everything except the upload.
 # Untick "Rehearse" to publish for real from a branch.
@@ -28,15 +26,36 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
+      # First, and deliberately before the build: `publishMods` uploads to CurseForge and to GitHub
+      # Releases, and a token that is missing or expired fails at *upload*. By then GitHub may have
+      # accepted the release already, which leaves a version published on one site and not the other
+      # -- and neither site lets you rename or replace a file after upload. A few seconds of curl
+      # turns that into a failure before anything has been published anywhere.
+      #
+      # The endpoint is the CurseForge upload API's cheapest authenticated GET. Measured against the
+      # real API rather than assumed: a valid token gets 200, a malformed one 400, an absent one 401.
+      # Anything else is reported as CurseForge being unwell rather than as a bad secret, because
+      # failing a release over a 502 would be its own kind of wrong.
+      - name: Check the CurseForge token
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          if [ -z "$CURSEFORGE_TOKEN" ]; then
+            echo "::error::CURSEFORGE_TOKEN is not set on this repository."
+            exit 1
+          fi
+          status="$(curl -s -o /dev/null -w '%{http_code}' \
+            --max-time 30 \
+            -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            https://minecraft.curseforge.com/api/game/versions)"
+          case "$status" in
+            200) echo "CurseForge token accepted." ;;
+            400|401|403) echo "::error::CurseForge rejected the token (HTTP $status)."; exit 1 ;;
+            *) echo "::error::Could not reach the CurseForge upload API (HTTP $status)."; exit 1 ;;
+          esac
 
-      - uses: gradle/actions/setup-gradle@v6
-
-      # A tag that disagrees with mod_version would publish the jar under the wrong number, and no
-      # release host lets you rename a file after upload.
+      # A tag that disagrees with mod_version would publish the jar under the wrong number on
+      # both sites at once, and neither lets you rename a file after upload.
       - name: Check the tag matches mod_version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -46,6 +65,13 @@ jobs:
             echo "::error::tag ${GITHUB_REF_NAME} does not match mod_version=${declared}"
             exit 1
           fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Build
         run: ./gradlew build
@@ -73,7 +99,7 @@ jobs:
           git add -A
           git diff --cached --exit-code
 
-      - name: Publish
+      - name: Publish to CurseForge and GitHub
         run: ./gradlew publishMods $EXTRA_ARGS
         env:
           # A manual run rehearses unless told otherwise; a tag push always publishes for real.

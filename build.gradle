@@ -185,10 +185,12 @@ publishMods {
     // have uploaded to build/ instead of uploading it.
     dryRun = providers.gradleProperty('dryRun').map { it.toBoolean() }.orElse(false)
 
-    // Only once a CurseForge project actually exists. The plugin validates a destination when the
-    // task runs, not when it is configured, so leaving an empty project id in here would sail past
-    // `-PdryRun=true` and fail against the real API -- after the GitHub release had been created.
-    if (curseforge_project_id) {
+    // Guarded because the plugin validates a destination when the task runs, not when it is
+    // configured: an empty project id would sail past `-PdryRun=true` and then fail against the real
+    // API, after the GitHub release had already been created. Blanking the id therefore drops the
+    // destination rather than breaking a release halfway through -- and says so, so that a release
+    // that quietly went to GitHub only is not a surprise.
+    if (curseforge_project_id?.trim()) {
         curseforge {
             projectId = curseforge_project_id
             projectSlug = 'create-terraform'
@@ -199,6 +201,9 @@ publishMods {
             serverRequired = true
             requires('create')
         }
+    } else {
+        logger.lifecycle('publishMods: no curseforge_project_id in gradle.properties -- ' +
+            'publishing to GitHub Releases only.')
     }
     // No `modrinth` block, deliberately -- see the Distribution notes in CLAUDE.md. Don't add one
     // back by only pasting the block: an empty MODRINTH_TOKEN fails at upload rather than at
