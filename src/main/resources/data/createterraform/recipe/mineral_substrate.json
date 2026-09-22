@@ -8,15 +8,18 @@
       "fluid": "minecraft:lava"
     },
     {
-      "item": "minecraft:gravel"
+      "item": "minecraft:clay_ball"
     },
     {
-      "item": "minecraft:clay_ball"
+      "tag": "c:dusts/obsidian"
+    },
+    {
+      "item": "minecraft:blaze_powder"
     }
   ],
   "results": [
     {
-      "amount": 100,
+      "amount": 500,
       "id": "createterraform:mineral_substrate"
     }
   ]

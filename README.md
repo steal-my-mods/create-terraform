@@ -65,10 +65,17 @@ still stops growing its history.
 eight Brass Casings, four Electron Tubes, four Precision Mechanisms, four Mechanical Pumps and a
 Nether Star.
 
-**Mineral Substrate** — mixed superheated: 250mB of lava, gravel and a clay ball in a Basin under a
-Mechanical Mixer with a Blaze Burner on blaze cake, for 100mB out. At the default cost that is one
-craft per block printed, which is where the machine's price actually lives — not in its stress, which
-is a Deployer's 4 SU/RPM and is charged only when it is standing still.
+**Mineral Substrate** — mixed superheated: 250mB of lava, a clay ball, powdered obsidian and blaze
+powder in a Basin under a Mechanical Mixer with a Blaze Burner on blaze cake, for 500mB out. At the
+default cost that is five blocks printed per craft, and it is where the machine's price actually
+lives — not in its stress, which is a Deployer's 4 SU/RPM and is charged only when it stands still.
+
+The three solid ingredients are three separate farms on purpose, none of which substitutes for
+another: washing sand off a cobblestone chain for the clay, casting and crushing obsidian for the
+dust, and a fortress spawner for the powder. Each is infinite and each runs unattended, which is the
+point — the Extruder is a deliberately inefficient way to make the few blocks this game gives you no
+other renewable source for. Roughly sixteen hundred blocks printed per diamond, nineteen hundred per
+ancient debris. Nothing you would use to farm iron, and the only thing that farms netherite.
 
 ## Configuration
 

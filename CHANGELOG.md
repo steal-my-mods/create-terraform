@@ -9,8 +9,8 @@ First release.
   throwaway chunks, up to `ChunkStatus.FEATURES` — terrain, surface rules, carvers and features —
   and reads the answer out. Caves and ravines are real, ore appears at its own rarity in its own
   depth band, and ore from other mods works without this mod knowing they exist.
-- **Mineral Substrate** — the heavy fluid the Extruder burns, mixed superheated from lava, gravel
-  and clay.
+- **Mineral Substrate** — the heavy fluid the Extruder burns, mixed superheated from lava, clay,
+  powdered obsidian and blaze powder. Three separate farms, all infinite and all unattended.
 - **Standing still.** Fed rotation and substrate, an Extruder works from a *core sample*: every
   printable block at its own altitude across a 48x48 footprint of virtual world, shuffled, one spent
   per cycle. The next sample is cut on a worker thread before the current one runs out, so the server

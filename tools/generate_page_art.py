@@ -25,7 +25,7 @@ What comes out:
                         needing to know either type by name.
 
 The recipe sheets are mostly other people's art -- the presses and casings are Create's, the
-gravel and the Nether Star are Mojang's -- and none of it is copied into this repo. Their models
+clay and the Nether Star are Mojang's -- and none of it is copied into this repo. Their models
 are resolved through their own parent chains and their textures read out of the jars Gradle has
 already cached, at the moment the picture is drawn, so what is kept here is a finished image and
 not somebody else's texture. That needs a build to have run once; the banner does not.
@@ -105,6 +105,9 @@ SUBJECTS = [
 # these", and naming them here keeps the choice in one place rather than in a layout.
 TAG_STAND_INS = {
     'minecraft:planks': 'minecraft:oak_planks',
+    # Create's own is the only item in this tag, so the stand-in is not a stand-in for
+    # anything -- the recipe is written against the tag so another mod's dust works too.
+    'c:dusts/obsidian': 'create:powdered_obsidian',
 }
 
 

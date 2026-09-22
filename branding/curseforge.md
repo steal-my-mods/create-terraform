@@ -54,7 +54,7 @@ cave-shaped, and ore from other mods works without any setup.
 
 <!-- IMAGE: recipe-terraform-extruder.png -- replace with the gallery URL -->
 
-**Mineral Substrate.** Superheated mixing in a Basin. 100mB is one block placed.
+**Mineral Substrate.** Superheated mixing in a Basin. 500mB is five blocks placed.
 
 <!-- IMAGE: recipe-mineral-substrate.png -- replace with the gallery URL -->
 
