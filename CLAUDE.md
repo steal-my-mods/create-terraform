@@ -279,11 +279,12 @@ fuel bill.
   +Y onto -Z, and the same rotation carries +Z onto +Y. South-authored, that makes `x: 90` the **up**
   variant and `x: 270` the **down** one. They were the wrong way round, so an Extruder placed
   pointing up faced down.
-- **The item model stows the barrel; the partials do not.** In the world the barrel rests at working
-  reach, with the cutting head a pixel short of the block being printed into. In an inventory slot
-  that is fifteen pixels hanging outside the cell, and everything shrinks to make room, so the icon
-  was mostly air. The item winds it back to just clear of the chuck. It is the one place the item
-  model is allowed to disagree with the partials, and it is a difference of pose rather than parts.
+- **The barrel's authored position is its innermost one.** `lead()` returns nought to `LEAD` and
+  never less, so the travel only ever pushes it further out from where the partial is drawn. The
+  item model therefore inlines those boxes exactly as they stand: it is already showing the barrel
+  as far in as the machine can pull it. Winding it back further to tidy up the icon was tried and
+  reverted, because a shorter barrel is a pose the machine cannot reach, and an item that shows one
+  is lying about the block.
 - **An item's icon is drawn from its model's own `display.gui` rotation**, not from a camera chosen
   here, so a picture of an item and the item in an inventory cannot disagree. `minecraft:block/block`
   hands down `[30, 225, 0]`, which shows a block's **north and east** faces. This casing is authored
