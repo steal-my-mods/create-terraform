@@ -239,6 +239,14 @@ rules. Everything else is a Deployer's and explaining it would be teaching Creat
   being read to make room for its own neighbours, and a machine standing still rebuilds its grid
   every block. This was latent at the old default of 24 and only showed up once prefetching doubled
   the pressure; `aVerticalDescentBuildsOneGrid` is what catches it.
+- **`BARREN` and `SURVEYING` alternate, so no instant is safe to assert on.** The cooldown is set
+  when a survey comes *back*, not when one is dispatched, so a machine above the strata cycles
+  barren → wait → survey → barren for ever and which state a given tick lands on depends on how long
+  a worker took. `anExtruderAboveTheStrataReportsBarren` waits for the state rather than sampling it
+  at a fixed delay; with waits of 20, 40, 80, 160, 200 and a survey costing fifteen-odd ticks, the
+  old fixed 200 sat almost exactly on a boundary and failed on a loaded runner and nowhere else. The
+  other idle reasons — `NO_SUBSTRATE`, `NO_ROTATION`, `OBSTRUCTED` — are terminal and can be read
+  after a settle.
 - **GameTests share one `VirtualChunkCache` per level and run interleaved on the server thread.**
   Never wait on `getGridsPrefetched()` — it may have moved for another test. Wait on
   `getPrefetchesInFlight() == 0`. Reads inside a single `thenExecute` lambda are safe, because

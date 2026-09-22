@@ -440,15 +440,29 @@ public class TerraformGameTests {
 		rig(helper, Direction.EAST);
 		fill(helper, Integer.MAX_VALUE);
 
-		helper.runAfterDelay(200, () -> {
-			TerraformExtruderBlockEntity extruder = extruder(helper);
-			helper.assertTrue(extruder.getIdleReason() == ExtruderIdleReason.BARREN,
-				"expected BARREN above the strata, was " + extruder.getIdleReason());
-			helper.assertTrue(extruder.getPrinted() == 0,
-				"an Extruder with an empty core sample printed " + extruder.getPrinted() + " blocks");
-			helper.assertTrue(extruder.getSampleSize() == 0, "an empty survey left blocks in the sample");
-			helper.succeed();
-		});
+		helper.startSequence()
+			// Long first, because the failure this guards against is a machine that surveys for ever:
+			// a check that passed at tick 20 would not have seen it. By 200 the backoff has doubled
+			// four times.
+			.thenIdle(200)
+			// Then wait for BARREN rather than demanding it on one particular tick. The two states
+			// alternate, and legitimately: the cooldown is only set when a survey comes BACK, so a
+			// machine above the strata spends its life going barren, waiting, and asking again, and
+			// which of the two an instant lands on depends on how long a worker took. With the waits
+			// running 20, 40, 80, 160, 200 and a survey costing fifteen-odd ticks, tick 200 falls
+			// almost exactly on a boundary -- so this failed on a loaded runner and nowhere else.
+			.thenWaitUntil(() -> {
+				ExtruderIdleReason reason = extruder(helper).getIdleReason();
+				helper.assertTrue(reason == ExtruderIdleReason.BARREN,
+					"expected BARREN above the strata, was " + reason);
+			})
+			.thenExecute(() -> {
+				TerraformExtruderBlockEntity extruder = extruder(helper);
+				helper.assertTrue(extruder.getPrinted() == 0,
+					"an Extruder with an empty core sample printed " + extruder.getPrinted() + " blocks");
+				helper.assertTrue(extruder.getSampleSize() == 0, "an empty survey left blocks in the sample");
+			})
+			.thenSucceed();
 	}
 
 	// --- the virtual chunk pipeline -----------------------------------------------------------
