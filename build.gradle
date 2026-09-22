@@ -174,7 +174,11 @@ publishMods {
     file = tasks.named('jar', Jar).flatMap { it.archiveFile }
     // Lazily, so a missing changelog section fails the release rather than an ordinary build.
     changelog = providers.provider { latestChangelog() }
-    type = STABLE
+    // Beta while this is pre-1.0. CurseForge shows the badge on the file and some launchers and
+    // pack tools filter on it, so it is the first thing a player learns about a release -- and a
+    // mod whose only machine has never been through anybody else's hands has not earned Stable yet.
+    // Change this to STABLE at 1.0.0; nothing else here reads the version.
+    type = BETA
     modLoaders.add('neoforge')
     // Without this the version is listed after the Gradle project name, which is not what the mod
     // is called anywhere a player can see.
