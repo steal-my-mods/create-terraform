@@ -603,7 +603,7 @@ class Sprites:
             sheets[value] = pixels
 
         model = {'textures': textures, 'elements': elements}
-        camera = camera_for(gui_rotation(chain[0]))
+        camera = camera_for(gui_rotation(*chain))
         span_width, span_height = extent_of(model, camera)
         return render_block_model.render_model(
             model, int(round(min(size / span_width, size / span_height))),
@@ -710,12 +710,20 @@ def camera_for(rotation):
     return (-math.sin(yaw), math.tan(pitch) if pitch else 0.0, math.cos(yaw))
 
 
-def gui_rotation(model):
-    """A model's GUI rotation, or the one its vanilla parent would have given it."""
-    display = (model or {}).get('display') or {}
-    gui = display.get('gui') or {}
-    rotation = gui.get('rotation')
-    return tuple(rotation) if rotation else DEFAULT_GUI_ROTATION
+def gui_rotation(*chain):
+    """
+    A model's GUI rotation, taken from the first model in its parent chain that states one.
+
+    It is rarely the model named by the item. `create:item/mechanical_pump` is nothing but a parent
+    line, and the rotation that turns a Pump to face the viewer -- [30, 135, 0] rather than
+    vanilla's [30, 225, 0] -- is two links down in `create:block/mechanical_pump/item`. Reading only
+    the first link gave every Create block the default, which is why the Pump faced the wrong way.
+    """
+    for model in chain:
+        gui = ((model or {}).get('display') or {}).get('gui') or {}
+        if gui.get('rotation'):
+            return tuple(gui['rotation'])
+    return DEFAULT_GUI_ROTATION
 
 
 def cube_model(reference):
