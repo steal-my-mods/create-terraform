@@ -48,9 +48,18 @@ above:
 - **It does not redistribute Create.** Create is resolved without transitives and nothing from it is
   bundled into the jar — at runtime the loader uses the player's own copy. This is also why the mod
   declares Create as a required dependency rather than shipping it.
-- **It does not use any Create asset.** Every texture and icon here is drawn by
+- **It does not ship any Create asset.** Every texture and icon in the jar is drawn by
   `tools/generate_textures.py` and `tools/generate_logo.py` from geometry described in those files.
-  No model in `assets/createterraform/` parents or textures off a `create:` resource.
+  No model in `assets/createterraform/` parents or textures off a `create:` resource. The Ponder
+  structures do name Create blocks — `create:shaft`, `create:mechanical_drill` and so on — but a
+  block id is a reference resolved against the player's own copy at load time, not a copied asset.
+
+The project-page art under `branding/` is the one place that is not true of, and it is not in the
+jar. `tools/generate_page_art.py` draws the recipe sheets by resolving each ingredient's model
+through its own parent chain and reading its textures out of the jars Gradle has cached, at the
+moment the picture is drawn — so Create's casings and pumps and Mojang's clay and Nether Star appear
+in those images. What is committed is the finished picture rather than anybody else's texture file,
+and it is used to describe the mod on its own store page.
 
 ## Orbital Regen (Regenarate-Chunks)
 

@@ -21,7 +21,15 @@ python3 tools/check_models.py         # block models: missing textures, holes in
 python3 tools/preview_machine.py -o /tmp/rig.json   # the whole machine, mud included
 python3 tools/check_models.py /tmp                 # cross-partial z-fighting
 python3 tools/render_block_model.py /tmp/rig.json -o out.png --angle hero
+
+sh tools/regenerate.sh           # every generated asset, in the order CI runs them
 ```
+
+`tools/regenerate.sh` is the list both workflows check against, and it is one list on purpose: they
+each kept their own for a while and the release gate went blind to the Ponder structures the day
+those were added. Add a generator there, not to a workflow. `generate_page_art.py` is deliberately
+not in it — it reads Create's and Minecraft's jars out of the Gradle cache, so it needs a build to
+have run, and a branding image is not worth making a build depend on that.
 
 `render_block_model.py` is an orthographic renderer for a block model, and it is the difference
 between designing the casing and guessing at it — three versions of this block were authored blind

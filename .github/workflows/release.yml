@@ -90,12 +90,7 @@ jobs:
       # discover it.
       - name: Generated assets are up to date
         run: |
-          python3 tools/generate_textures.py
-          python3 tools/generate_structures.py
-          python3 tools/generate_models.py
-          python3 tools/check_models.py
-          python3 tools/generate_logo.py
-          python3 tools/generate_logo.py branding/icon-512.png --size 512
+          sh tools/regenerate.sh
           git add -A
           git diff --cached --exit-code
 
