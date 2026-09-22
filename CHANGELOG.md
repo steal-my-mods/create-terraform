@@ -28,3 +28,11 @@ First release.
 - No liquid is ever placed, and neither is bedrock, an end portal frame, reinforced deepslate or
   anything carrying a block entity. Placements skip neighbour and shape updates, so a machine
   printing next to standing water cannot cascade.
+- **The rig turns on a contraption too.** An assembled Extruder used to be a bare casing with an
+  empty mud window; the spindle, the barrel and the mud now all draw and animate out there, off the
+  contraption's own motion rather than off a rotational network it is not part of. The machine's
+  mounted tank is synced, so the mud window tells the truth about a print that has been running for
+  a while.
+- **Two Ponder scenes**, on the Extruder itself: one of the machine standing still with a harvester
+  taking what it makes, and one of a Rope Pulley painting a bank of ground on the way down and
+  rerolling it on the way back up.

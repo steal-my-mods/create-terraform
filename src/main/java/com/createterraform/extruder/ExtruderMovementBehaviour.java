@@ -1,6 +1,7 @@
 package com.createterraform.extruder;
 
 import com.createterraform.TerraformConfig;
+import com.createterraform.client.TerraformExtruderRenderer;
 import com.createterraform.registry.TerraformAttachments;
 import com.createterraform.registry.TerraformFluids;
 import com.createterraform.strata.PlacementRules;
@@ -10,7 +11,10 @@ import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.api.behaviour.movement.MovementBehaviour;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import com.simibubi.create.content.contraptions.behaviour.MovementContext;
+import com.simibubi.create.content.contraptions.render.ContraptionMatrices;
+import com.simibubi.create.foundation.virtualWorld.VirtualRenderWorld;
 
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -97,6 +101,40 @@ public class ExtruderMovementBehaviour implements MovementBehaviour {
 		return Vec3.atLowerCornerOf(TerraformExtruderBlock.getFacing(context.state)
 			.getNormal())
 			.scale(ACTIVE_AREA_REACH);
+	}
+
+	/**
+	 * The stationary renderer must not run out here, because the only thing it knows how to read is a
+	 * kinetic speed.
+	 *
+	 * <p>An actor belongs to no rotational network — a contraption is driven by whatever is carrying
+	 * it, not by a shaft — so {@code getAngleForBe} would return whatever speed happened to be saved
+	 * in the machine's NBT the instant it was assembled, and hold it there. A rig frozen mid-turn
+	 * while the contraption moves is worse than one that does not move at all, because it looks
+	 * broken rather than simply plain.
+	 *
+	 * <p>Create's Drill, Saw, Deployer, Harvester and Roller all do this, and all for the same
+	 * reason: a block with a {@link MovementBehaviour} that draws its own moving parts draws them in
+	 * {@link #renderInContraption}, where the contraption's own motion is in reach.
+	 */
+	@Override
+	public boolean disableBlockEntityRendering() {
+		return true;
+	}
+
+	/**
+	 * Draws the spindle, the barrel and the mud.
+	 *
+	 * <p>Deliberately unguarded. Create's own Drill wraps this in
+	 * {@code VisualizationManager.supportsVisualization} and falls through to a
+	 * {@code DrillActorVisual} when Flywheel is running; there is no Extruder visual, so there is
+	 * nothing to defer to, and guarding would leave an assembled machine headless on every backend
+	 * but the fallback. {@code ContraptionEntityRenderer} calls this either way.
+	 */
+	@Override
+	public void renderInContraption(MovementContext context, VirtualRenderWorld renderWorld,
+		ContraptionMatrices matrices, MultiBufferSource buffer) {
+		TerraformExtruderRenderer.renderInContraption(context, renderWorld, matrices, buffer);
 	}
 
 	/**

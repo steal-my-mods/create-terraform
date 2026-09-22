@@ -172,6 +172,19 @@ public class TerraformExtruderBlockEntity extends KineticBlockEntity {
 		notifyUpdate();
 	}
 
+	/**
+	 * The same, for the copy of this machine a contraption renders from.
+	 *
+	 * <p>Separate from {@link #setTankContents} only because of the {@code notifyUpdate}: that one
+	 * marks the chunk dirty and sends a block update, and the block entity this is called on lives in
+	 * a {@code VirtualRenderWorld} that has no chunk to mark and nobody to send to. See
+	 * {@link ExtruderMountedStorage#afterSync}.
+	 */
+	public void setTankContentsForDisplay(FluidStack contents) {
+		tank.getPrimaryHandler()
+			.setFluid(contents);
+	}
+
 	/** Blocks this machine has written. */
 	public long getPrinted() {
 		return printed;

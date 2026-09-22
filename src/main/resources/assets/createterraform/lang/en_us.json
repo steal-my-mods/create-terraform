@@ -11,5 +11,19 @@
   "createterraform.tooltip.terraform_extruder.idle.no_substrate": "Out of Mineral Substrate",
   "createterraform.tooltip.terraform_extruder.idle.obstructed": "Blocked",
   "createterraform.tooltip.terraform_extruder.idle.surveying": "Taking a core sample",
-  "createterraform.tooltip.terraform_extruder.idle.barren": "Nothing but sky at this depth"
+  "createterraform.tooltip.terraform_extruder.idle.barren": "Nothing but sky at this depth",
+
+  "createterraform.ponder.terraform_extruder.header": "Printing terrain with a Terraform Extruder",
+  "createterraform.ponder.terraform_extruder.text_1": "The Terraform Extruder runs on rotation and a fluid called Mineral Substrate",
+  "createterraform.ponder.terraform_extruder.text_2": "It places a block two spaces in front of itself, at the same rate a Deployer works",
+  "createterraform.ponder.terraform_extruder.text_3": "What it places is whatever your world's own terrain generation would have put there. Ore turns up at its usual rarity and depth, caves come out cave-shaped, and ore from other mods needs no setup",
+  "createterraform.ponder.terraform_extruder.text_4": "Standing still it will only place into empty space — never over rock, not even its own. So it fills the spot once and then waits",
+  "createterraform.ponder.terraform_extruder.text_5": "Point a harvester at it and the harvester sets the pace",
+  "createterraform.ponder.terraform_extruder.text_6": "Depth is not displaced, only the horizontal, so the machine works best underground. Up here it mostly samples open sky, and says so under goggles",
+
+  "createterraform.ponder.extruder_contraption.header": "Terraform Extruders on a contraption",
+  "createterraform.ponder.extruder_contraption.text_1": "Glue an Extruder to a Rope Pulley, a Gantry Carriage or a Minecart Contraption and it prints as it travels",
+  "createterraform.ponder.extruder_contraption.text_2": "On the move it prints over whatever is already there, rather than only into empty space — which is the whole job, since displaced strata have to go somewhere",
+  "createterraform.ponder.extruder_contraption.text_3": "It runs off the contraption's own tanks, and several Extruders on one contraption share a seed, so a wide print comes out as one piece of rock rather than in patches",
+  "createterraform.ponder.extruder_contraption.text_4": "Driving back over ground it has already printed rerolls the offset, so the same vein cannot be farmed twice"
 }

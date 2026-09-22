@@ -13,6 +13,7 @@ Minecraft 1.21.1, NeoForge 21.1.248, Create 6.0.11. Java 21. Mod id `createterra
 
 python3 tools/generate_textures.py    # every texture the mod ships
 python3 tools/generate_structures.py  # the GameTest structure template
+python3 tools/generate_ponder.py      # the Ponder structures, and their lang keys
 python3 tools/generate_logo.py        # the mod badge
 python3 tools/generate_page_art.py    # branding/: the banner and a sheet per recipe
 python3 tools/generate_models.py      # blockstate, casing models, partials, item model
@@ -101,9 +102,10 @@ modes that are silent, expensive and easy to reintroduce.
 | `strata/PlacementRules` | The blacklist, the two placement rules, and the block-update flags. |
 | `extruder/TerraformExtruderBlockEntity` | Standing still: core-sample queue, async double buffering, NBT. |
 | `extruder/ExtruderMovementBehaviour` | Moving: Create's `MovementBehaviour`, and the Seismic Shift. |
-| `extruder/ExtruderMountedStorage` | The machine's tank, mounted into a contraption's fluid pool. |
-| `client/TerraformExtruderRenderer` | Spindle and barrel, both on the facing. Phase is read off the world clock and the machine's speed, so nothing is synced for it. |
+| `extruder/ExtruderMountedStorage` | The machine's tank, mounted into a contraption's fluid pool, and synced so the mud window stays honest out there. |
+| `client/TerraformExtruderRenderer` | Spindle, barrel and mud, all on the facing, standing still **and** on a contraption. Nothing is synced for the animation: standing still the angle is the machine's own speed, moving it is the contraption's. |
 | `client/TerraformPartials` | Barrel, spindle and gauge — all up-authored, because that is what Create's orientation transform expects. |
+| `client/ponder/ExtruderScenes` | The two Ponder storyboards. Layouts match `tools/generate_ponder.py`, which writes the structures and the lang. |
 
 ## The two placement rules
 
@@ -133,6 +135,61 @@ There is deliberately **no fuel surcharge for displacing rock**. Cost scales wit
 not with what happened to be there — a surcharge would make the machine cheapest where it does least
 (filling air) and dearest where it is most useful. The anti-exploit is the Seismic Shift, not the
 fuel bill.
+
+## Drawing the rig on a contraption
+
+An assembled Extruder used to be a bare casing. It is not any more, and the three facts that made
+that work are each the opposite of what they look like:
+
+- **`renderInContraption` runs on every backend.** `ContraptionEntityRenderer` skips only the
+  *structure* buffer when Flywheel is visualizing and calls `renderActors` either way, so the
+  `VisualizationManager.supportsVisualization` check inside Create's Drill is the Drill deferring to
+  its own `DrillActorVisual`, not Create asking. Copying that guard without writing a visual is how
+  you get a headless machine on the backend almost everybody runs.
+- **The block entity renderer *does* run on a contraption**, unless the actor's
+  `disableBlockEntityRendering()` says otherwise. So an actor that draws its own moving parts has to
+  turn it off or the parts are drawn twice — once live and once frozen, because the stationary
+  renderer reads a kinetic speed and an actor belongs to no rotational network. Create's Drill, Saw,
+  Deployer, Harvester and Roller all turn it off. `theExtruderIsRegisteredAsAContraptionActor`
+  asserts we do.
+- **`context.getFluidStorage()` is memoized, and a storage sync replaces the storage rather than
+  mutating it.** So the obvious way to read the tank hands back the copy captured at assembly, for
+  the life of the contraption. `ExtruderMountedStorage.afterSync` writes each arriving load into the
+  client-side block entity instead — `contraption.getBlockEntityClientSide(pos)`, which still returns
+  it even with the renderer disabled — and that is what the gauge reads. Create's own Fluid Tank
+  does exactly this.
+
+The angle out there is `MovementContext.getAnimationSpeed()`, which is motion rather than rotation
+and already answers two edge cases: nought when the actor is switched off from the controls, and a
+flat 700 while the contraption is stalled, which is how every Create actor shows it is straining.
+It is deliberately **not** gated on direction the way the Drill's is — a Drill only cuts forwards,
+and an Extruder prints on every position it enters whichever way it is going.
+
+## Ponder
+
+Two scenes, both hung off the Extruder item: the stationary machine, and one on a Rope Pulley.
+Between them they cover the only two things about this machine a Create player cannot guess — that
+the blocks come out of the world's own generator, and that standing still and moving obey different
+rules. Everything else is a Deployer's and explaining it would be teaching Create.
+
+- **Nothing in a ponder scene rotates by itself.** A ponder level is client-side and every path that
+  assigns a kinetic speed is server-gated, so the Creative Motors in these structures drive nothing.
+  `CreateSceneBuilder`'s `setKineticSpeed` writes the `Speed` tag the renderer reads, which is why
+  both storyboards open by wrapping the builder they are handed. The motors are in the structures
+  anyway: a scene showing an Extruder turning with nothing attached would be teaching that it does
+  not need rotation.
+- **The scene is not a real contraption.** Ponder has no assembly; the pulley scene is
+  `showIndependentSection` plus `moveSection` and `movePulley`, so `renderInContraption` never runs
+  in it. The scene teaches the mechanic; it does not exercise the code.
+- **A scene's text is the source of its lang key.** `tools/generate_ponder.py` reads the `.text(...)`
+  calls straight out of `ExtruderScenes.java` and writes `createterraform.ponder.<scene>.text_N` in
+  call order, because Ponder derives that key itself and shows the player the raw key when it is
+  missing. Edit a line, re-run the generator. `thePonderScenesAreTranslated` catches a lang file that
+  has drifted, and CI catches a generator nobody re-ran.
+- **The structures are generated and diffed, like every other asset here.** Do not hand-edit an
+  `.nbt` under `assets/createterraform/ponder/`. A palette entry naming a block or a property that
+  does not exist fails nowhere until a player opens the scene, which is what
+  `thePonderStructuresAreValid` is for.
 
 ## Things that will bite
 
@@ -196,15 +253,14 @@ fuel bill.
 
 ## Known gaps
 
-- **`SyncedMountedStorage` is still not worth implementing.** The gauge exists now, but it is drawn
-  by the block entity renderer, and that does not run on a contraption — so there is still nothing
-  on the far side to keep truthful. It becomes worth doing the same day `renderInContraption` does.
-- **The barrel, spindle and gauge do not animate on a contraption.** `MovementBehaviour.renderInContraption` is not
-  implemented, so an assembled Extruder shows its casing with the head missing. Create's Drill does
-  this through a static `renderInContraption` plus a Flywheel `ActorVisual`; we have neither yet.
-  An assembled Extruder therefore shows its casing with an empty mud window and no moving parts.
-- **No Flywheel visual.** Without one Create never skips the block entity renderer, so the rig draws
-  on every backend — correct, just not instanced.
+- **No Flywheel visual, stationary or moving.** Without one Create never skips the block entity
+  renderer, so the stationary rig draws on every backend — correct, just not instanced. The same
+  absence is why `ExtruderMovementBehaviour.renderInContraption` carries no
+  `supportsVisualization` guard: Create's Drill guards its own because a `DrillActorVisual` takes
+  over, and an Extruder that guarded would go headless on every backend but the fallback. Adding a
+  visual means writing the rig's geometry a second time and keeping the two in step, and is only
+  worth it once there are enough Extruders on screen for instancing to pay — at which point the
+  guard goes in with it.
 
 ## Conventions
 

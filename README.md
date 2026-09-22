@@ -45,7 +45,9 @@ continuous piece of world — a cave that starts under the first machine carries
 and a vein clipped by one is finished by its neighbour.
 
 Substrate comes from the contraption's own tanks, and an Extruder's internal buffer is mounted into
-that pool, so a lone machine on a pulley runs off what it was already carrying.
+that pool, so a lone machine on a pulley runs off what it was already carrying. That buffer is synced
+while the contraption is assembled, so the mud window is worth looking at on a rig that has been
+running a while.
 
 Because a contraption's signature is fixed, where it will need to read next is exactly where it is
 pointed — so the chunk ahead of it is generated on a worker thread before it gets there. A machine
@@ -58,6 +60,8 @@ reverse a Rope Pulley up the shaft it just came down — and it vents, forgets e
 new signature. You still get rock on the way back up; you do not get the same rock twice. The same
 shift fires on size alone at 65,536 coordinates, so a tunnel bore that never crosses its own path
 still stops growing its history.
+
+Both of these have a **Ponder** scene, opened from the Extruder in your inventory.
 
 ## Getting one
 

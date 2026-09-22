@@ -5,42 +5,51 @@ import com.createterraform.extruder.TerraformExtruderBlock;
 import com.createterraform.extruder.TerraformExtruderBlockEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.simibubi.create.content.contraptions.behaviour.MovementContext;
+import com.simibubi.create.content.contraptions.render.ContraptionMatrices;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
+import com.simibubi.create.foundation.virtualWorld.VirtualRenderWorld;
 
+import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.math.AngleHelper;
-import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider.Context;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.AxisDirection;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Drives the rig.
  *
- * <p>Three moving parts on two axes, and the split is the machine's whole explanation of itself. The
- * bevel gears turn about the <em>rotation</em> axis, which on this machine goes in the sides. The
- * chuck and the barrel turn about the <em>facing</em>, a quarter away from it — that quarter is what
- * the bevel is for, and it is why a shaft can come in the side of a machine whose core comes out the
- * front. The barrel alone also advances, so it slides through a chuck that stays put, which is what
- * makes this read as a drill rather than a piston.
+ * <p>Three moving parts on one axis. The shaft stub and the barrel both turn about the
+ * <em>facing</em>, because the drive is coaxial with the barrel it turns; the barrel alone also
+ * advances, sliding through a chuck that stays where it is, which is what makes the machine read as
+ * a drill rather than a piston. The third is the mud, squashed to whatever is in the tank.
  *
- * <p>The casing model holds none of them — it is the box they move in, with a bore through each side
- * wall for the gears, a wide bore through the front for the chuck, and a slot in the lid for the mud.
- * At full extension the cutting head is inside the block being printed into and the string bridges
- * the gap, which is the arrangement every Create machine of this kind uses — a Deployer's pole is
- * modelled from z=-9 to 12 and its hand from 12 to 25, both deliberately past the block boundary.
+ * <p>The casing model holds none of them — it is the box they move in, with a bore through the back
+ * plate for the shaft stub, a wider bore through the front the barrel runs out of, and an open tank
+ * on the deck above.
+ *
+ * <h2>Two ways in, one rig</h2>
+ * {@link #renderSafe} draws the machine standing still and {@link #renderInContraption} draws it
+ * riding one, and the only thing that differs between them is where the angle comes from and which
+ * matrices the result is submitted through. Everything about the geometry — the swing onto the
+ * facing, the spin, the lead, the squash of the mud — is shared, because two copies of it would
+ * drift and the drift would be invisible until somebody assembled a machine and looked at it.
  *
  * <h2>Where the timing comes from</h2>
- * Nothing is synced for any of it, and nothing needs to be. Both the spin and the travel are
- * functions of one angle, and that angle comes from the machine's own speed, which is already on the
- * client because every kinetic block needs it. So the rig turns in time with the shaft at whatever
- * RPM it is running, and costs not one packet.
+ * Nothing is synced for any of it, and nothing needs to be. Standing still, both the spin and the
+ * travel are functions of one angle, and that angle comes from the machine's own speed, which is
+ * already on the client because every kinetic block needs it. On a contraption there is no kinetic
+ * speed to read — an actor is not part of any rotational network — so the angle comes from how fast
+ * the contraption is moving, which is what Create's own Drill does and for the same reason.
  *
  * <p>Deriving the travel from the angle rather than from a timer beside it is what keeps the two
  * from drifting apart. An earlier version pumped a ram on a cycle timer, which meant the stroke and
@@ -73,6 +82,9 @@ public class TerraformExtruderRenderer extends SafeBlockEntityRenderer<Terraform
 	 */
 	private static final float GAUGE_START = 3.3F / 16F;
 
+	/** Below this there is not enough mud left to be worth a draw call, or to see. */
+	private static final float EMPTY = 0.001F;
+
 	public TerraformExtruderRenderer(Context context) {
 	}
 
@@ -86,63 +98,161 @@ public class TerraformExtruderRenderer extends SafeBlockEntityRenderer<Terraform
 		// Everything here turns whenever the shaft does, printing or not. That is the machine's only
 		// sign of life while it waits on mud, and a block that takes rotation should look like it takes
 		// rotation.
-		//
-		// One axis serves all of it. The drive is coaxial with the barrel it turns, so the rotation axis
-		// IS the facing, and both partials are authored pointing up -- whichever way the machine points
-		// becomes their local up, and the spin is about that local up.
-		//
-		// Which means the sign has to be put right by hand. getAngleForBe measures the angle about the
-		// POSITIVE direction of the axis, and that is what Create's own kineticRotationTransform turns
-		// about: rotateCentered(angle, Direction.get(POSITIVE, axis)). Our partials are swung onto the
-		// FACING, and for north, west and down that is the negative direction — so the same angle
-		// applied there turns the machine backwards against the very shaft driving it. Negating it is
-		// exactly equivalent to rotating about the positive direction instead.
-		float spin = AngleHelper.deg(
-			KineticBlockEntityRenderer.getAngleForBe(be, be.getBlockPos(), facing.getAxis()));
-		if (facing.getAxisDirection() == AxisDirection.NEGATIVE)
-			spin = -spin;
+		float spin = aboutFacing(AngleHelper.deg(
+			KineticBlockEntityRenderer.getAngleForBe(be, be.getBlockPos(), facing.getAxis())), facing);
 
-		// The shaft stub in the back bore. It turns and stays put. Four pixels in a six-pixel bore,
-		// which is Create's own proportion and not an accident: a four-wide square sweeps its corners
-		// 2.83 from centre and the bore's half-width is 3, so it turns without touching the casing.
-		oriented(TerraformPartials.EXTRUDER_SHAFT, state, facing).rotateYDegrees(spin)
-			.uncenter()
-			.light(light)
+		shaft(CachedBuffers.partial(TerraformPartials.EXTRUDER_SHAFT, state), facing, spin).light(light)
+			.renderInto(ms, vb);
+		barrel(CachedBuffers.partial(TerraformPartials.EXTRUDER_BARREL, state), facing, spin).light(light)
 			.renderInto(ms, vb);
 
-		// The barrel: the same spin, and the lead on top of it, so it slides through the chuck.
-		// Uncentre before translating -- the last transform named is the first applied, so this moves
-		// along the barrel's own axis rather than the world's, and spins about that axis rather than
-		// orbiting it.
-		oriented(TerraformPartials.EXTRUDER_BARREL, state, facing).rotateYDegrees(spin)
-			.uncenter()
-			.translate(0F, lead(spin), 0F)
+		float fill = be.getFillLevel();
+		if (fill <= EMPTY)
+			return;
+		ms.pushPose();
+		poseGauge(ms, facing, fill);
+		CachedBuffers.partial(TerraformPartials.EXTRUDER_GAUGE, state)
 			.light(light)
 			.renderInto(ms, vb);
-
-		renderGauge(be, facing, state, ms, vb, light);
+		ms.popPose();
 	}
 
 	/**
-	 * The mud in the tank, seen straight down into it, because the tank has no lid.
+	 * The same rig, on a contraption, drawn straight rather than instanced.
+	 *
+	 * <p>Create calls this for every actor on every backend — {@code ContraptionEntityRenderer}
+	 * skips only the structure buffer when Flywheel is visualizing, and runs the actors either way.
+	 * Its own Drill guards the body of this method with {@code supportsVisualization} because it has
+	 * a {@code DrillActorVisual} to take over; we have no visual, so there is nothing to defer to and
+	 * no guard. The cost is that the rig is not instanced, which is the same trade the stationary
+	 * machine already makes.
+	 *
+	 * <p>Without this an assembled Extruder is its casing and nothing else. The block entity renderer
+	 * above does not run out here — {@code ExtruderMovementBehaviour.disableBlockEntityRendering}
+	 * turns it off, and has to: it reads a kinetic speed, and an actor belongs to no rotational
+	 * network, so it would draw a head frozen at whatever the machine happened to be doing the
+	 * instant it was assembled.
+	 */
+	public static void renderInContraption(MovementContext context, VirtualRenderWorld renderWorld,
+		ContraptionMatrices matrices, MultiBufferSource buffer) {
+		BlockState state = context.state;
+		Direction facing = TerraformExtruderBlock.getFacing(state);
+		VertexConsumer vb = buffer.getBuffer(RenderType.solid());
+		int light = LevelRenderer.getLightColor(renderWorld, context.localPos);
+
+		// Motion is the drive out here. getAnimationSpeed is Create's own reading of it, and it
+		// already answers the two edge cases for us: nought when the actor has been switched off
+		// from the controls, and a hard 700 while the contraption is stalled, which is how every
+		// Create actor shows that it is straining against something.
+		//
+		// Not gated on direction, unlike the Drill's. A Drill only cuts going forwards, so Create
+		// stops its head when one is dragged backwards; an Extruder prints on every position it
+		// enters whichever way it is travelling, and a rig that stopped turning while it was still
+		// laying rock would be lying about what it was doing.
+		float spin = aboutFacing(AnimationTickHolder.getRenderTime() / 20F * context.getAnimationSpeed() % 360,
+			facing);
+
+		submit(shaft(CachedBuffers.partial(TerraformPartials.EXTRUDER_SHAFT, state)
+			.transform(matrices.getModel()), facing, spin), context, matrices, vb, light);
+		submit(barrel(CachedBuffers.partial(TerraformPartials.EXTRUDER_BARREL, state)
+			.transform(matrices.getModel()), facing, spin), context, matrices, vb, light);
+
+		float fill = fillLevelOf(context);
+		if (fill <= EMPTY)
+			return;
+		PoseStack model = matrices.getModel();
+		model.pushPose();
+		poseGauge(model, facing, fill);
+		submit(CachedBuffers.partial(TerraformPartials.EXTRUDER_GAUGE, state)
+			.transform(model), context, matrices, vb, light);
+		model.popPose();
+	}
+
+	/**
+	 * How full the tank is, read off the block entity the contraption keeps on the client.
+	 *
+	 * <p>Not off {@code context.getFluidStorage()}, which looks like the obvious source and is a
+	 * trap: that supplier is memoized, and a storage sync replaces the storage object rather than
+	 * mutating it, so the context would go on handing back the tank as it stood at assembly for the
+	 * life of the contraption. {@code ExtruderMountedStorage.afterSync} pushes each arriving load
+	 * into this block entity instead, which is how Create's own Fluid Tank keeps its level honest.
+	 */
+	private static float fillLevelOf(MovementContext context) {
+		BlockEntity be = context.contraption.getBlockEntityClientSide(context.localPos);
+		return be instanceof TerraformExtruderBlockEntity extruder ? extruder.getFillLevel() : 0F;
+	}
+
+	/** Lit and handed to the contraption's matrices, which is the only part of this Create owns. */
+	private static void submit(SuperByteBuffer rig, MovementContext context, ContraptionMatrices matrices,
+		VertexConsumer vb, int light) {
+		rig.light(light)
+			.useLevelLight(context.world, matrices.getWorld())
+			.renderInto(matrices.getViewProjection(), vb);
+	}
+
+	/**
+	 * The shaft stub in the back bore. It turns and stays put.
+	 *
+	 * <p>Four pixels in a six-pixel bore, which is Create's own proportion and not an accident: a
+	 * four-wide square sweeps its corners 2.83 from centre and the bore's half-width is 3, so it
+	 * turns without touching the casing.
+	 */
+	private static SuperByteBuffer shaft(SuperByteBuffer raw, Direction facing, float spin) {
+		return swung(raw, facing).rotateYDegrees(spin)
+			.uncenter();
+	}
+
+	/**
+	 * The barrel: the same spin, and the lead on top of it, so it slides through the chuck.
+	 *
+	 * <p>Uncentred before it is translated — the last transform named is the first applied — so this
+	 * moves along the barrel's own axis rather than the world's, and spins about that axis rather
+	 * than orbiting it.
+	 */
+	private static SuperByteBuffer barrel(SuperByteBuffer raw, Direction facing, float spin) {
+		return swung(raw, facing).rotateYDegrees(spin)
+			.uncenter()
+			.translate(0F, lead(spin), 0F);
+	}
+
+	/**
+	 * Centred and swung onto {@code facing}, still centred so the caller can spin it.
+	 *
+	 * <p>One axis serves the whole rig. The drive is coaxial with the barrel it turns, so the rotation
+	 * axis <em>is</em> the facing, and both partials are authored pointing up — whichever way the
+	 * machine points becomes their local up, and the spin is about that local up.
+	 */
+	private static SuperByteBuffer swung(SuperByteBuffer raw, Direction facing) {
+		return raw.center()
+			.rotateYDegrees(AngleHelper.horizontalAngle(facing))
+			.rotateXDegrees(AngleHelper.verticalAngle(facing) + 90);
+	}
+
+	/**
+	 * The same angle, measured the way the partials are swung.
+	 *
+	 * <p>{@code getAngleForBe} measures about the <em>positive</em> direction of the axis, and that is
+	 * what Create's own {@code kineticRotationTransform} turns about:
+	 * {@code rotateCentered(angle, Direction.get(POSITIVE, axis))}. Our partials are swung onto the
+	 * facing, and for north, west and down that is the negative direction — so the same angle applied
+	 * there turns the machine backwards against the very shaft driving it. Negating it is exactly
+	 * equivalent to rotating about the positive direction instead, and half of all placements looked
+	 * wrong until it did.
+	 */
+	private static float aboutFacing(float angle, Direction facing) {
+		return facing.getAxisDirection() == AxisDirection.NEGATIVE ? -angle : angle;
+	}
+
+	/**
+	 * Poses the mud in the tank, seen straight down into it, because the tank has no lid.
 	 *
 	 * <p>Squashed rather than slid, which is why this one goes through the {@link PoseStack} instead
 	 * of the buffer's own transforms: mud translated back to show an empty tank has to have somewhere
 	 * to hide, and a machine this size has nowhere. Scaling about the back of the tank drains it away
 	 * from the barrel and leaves the tank floor showing, which is what an empty gauge should look
 	 * like.
-	 *
-	 * <p>There is one casing model now, so this no longer has to be symmetric about the facing to
-	 * serve two of them — the tank is simply open at the top and the mud is visible straight down
-	 * into it.
 	 */
-	private static void renderGauge(TerraformExtruderBlockEntity be, Direction facing, BlockState state,
-		PoseStack ms, VertexConsumer vb, int light) {
-		float fill = be.getFillLevel();
-		if (fill <= 0.001F)
-			return;
-
-		ms.pushPose();
+	private static void poseGauge(PoseStack ms, Direction facing, float fill) {
 		ms.translate(0.5, 0.5, 0.5);
 		ms.mulPose(com.mojang.math.Axis.YP.rotationDegrees(AngleHelper.horizontalAngle(facing)));
 		ms.mulPose(com.mojang.math.Axis.XP.rotationDegrees(AngleHelper.verticalAngle(facing) + 90));
@@ -152,19 +262,6 @@ public class TerraformExtruderRenderer extends SafeBlockEntityRenderer<Terraform
 		ms.translate(0, GAUGE_START, 0);
 		ms.scale(1F, fill, 1F);
 		ms.translate(0, -GAUGE_START, 0);
-
-		CachedBuffers.partial(TerraformPartials.EXTRUDER_GAUGE, state)
-			.light(light)
-			.renderInto(ms, vb);
-		ms.popPose();
-	}
-
-	/** Centred and swung to face {@code facing}, still centred so the caller can spin it. */
-	private static SuperByteBuffer oriented(PartialModel model, BlockState state, Direction facing) {
-		return CachedBuffers.partial(model, state)
-			.center()
-			.rotateYDegrees(AngleHelper.horizontalAngle(facing))
-			.rotateXDegrees(AngleHelper.verticalAngle(facing) + 90);
 	}
 
 	/**

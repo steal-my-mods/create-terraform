@@ -48,6 +48,10 @@ cave-shaped, and ore from other mods works without any setup.
 - Driving back over ground you have already printed rerolls the offset, so you cannot farm the same
   ore twice.
 
+## Ponder
+
+Both of the above have a Ponder scene, opened from the Extruder in your inventory.
+
 ## Recipes
 
 **Terraform Extruder.** Mechanical Crafter, 5x5, makes 16.
