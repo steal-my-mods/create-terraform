@@ -245,13 +245,21 @@ def to_model(boxes, textures, comment):
             'textures': dict({'particle': particle}, **textures), 'elements': elements}
 
 
+#: The casing is authored facing SOUTH, so each variant is the rotation that carries +Z onto the
+#: facing. The two vertical ones were the wrong way round, which put an Extruder placed pointing up
+#: face down and vice versa.
+#:
+#: The convention is fixed by Create's own Mechanical Drill, which is the same kind of block: its
+#: model is authored pointing UP -- `facing=up` carries no rotation -- and `facing=north` is `x: 90`.
+#: So `x: 90` carries +Y onto -Z, and the same rotation carries +Z onto +Y. South-authored, that
+#: makes `x: 90` the UP variant and `x: 270` the DOWN one.
 VARIANTS = {
     'facing=south': {},
     'facing=north': {'y': 180},
     'facing=east':  {'y': 270},
     'facing=west':  {'y': 90},
-    'facing=up':    {'x': 270},
-    'facing=down':  {'x': 90},
+    'facing=up':    {'x': 90},
+    'facing=down':  {'x': 270},
 }
 
 
@@ -366,6 +374,21 @@ def main():
     # The item has to show the machine complete, because the block model leaves the moving parts to
     # the renderer. Create does the same in deployer/item.json. Built from the same sources here so
     # it cannot drift out of step by hand.
+    # The barrel, stowed, for the item only. In the world it rests at working reach, with the
+    # cutting head a pixel short of the block being printed into -- which is correct there and
+    # wasteful in an inventory slot: fifteen pixels of it hang outside the cell, and everything has
+    # to shrink to make room, so the machine ends up small and mostly air. Wound back to just clear
+    # of the chuck, the item is the machine rather than the machine and a lance.
+    #
+    # The one place the item model is allowed to disagree with the partials, and it is a difference
+    # of pose rather than of parts: same boxes, same textures, same order.
+    stowed = [
+        {'from': [5.5, 2, 5.5], 'to': [10.5, 9, 10.5], '__tex': 'ram'},
+        {'from': [5.5, 9, 5.5], 'to': [10.5, 16, 10.5], '__tex': 'barrel'},
+        {'from': [4.8, 13.5, 4.8], 'to': [11.2, 14.5, 11.2], '__tex': 'ram'},
+        {'from': [5.8, 16, 5.8], 'to': [10.2, 18, 10.2], '__tex': 'die'},
+    ]
+
     # Both partials stand on the facing now, and both are authored pointing up, so both turn the
     # same way here. While rotation came in the side there were two mappings and getting them the
     # same way round buried the gears in the front wall, where the item showed a machine that could
@@ -376,7 +399,7 @@ def main():
                     'east': 'east', 'west': 'west'})
 
     extra = []
-    for parts in (barrel, spindle):
+    for parts in (stowed, spindle):
         move, remap = ONTO_FACING
         for box in parts:
             rotated_lo, rotated_hi = move(box['from'], box['to'])
@@ -397,7 +420,7 @@ def main():
             'display': {'gui': {'rotation': [30, 315, 0], 'translation': [0, 0, 0],
                                 'scale': [0.625, 0.625, 0.625]}},
             'textures': dict(shell['textures'],
-                             **{name: TEX[name] for p in (barrel, spindle) for b in p
+                             **{name: TEX[name] for p in (stowed, spindle) for b in p
                                 for name in (b['__tex'], b.get('__tex_end')) if name}),
             'elements': [{k: v for k, v in e.items() if k != '__comment'} for e in shell['elements']] + extra}
     write('models/item/terraform_extruder.json', item)

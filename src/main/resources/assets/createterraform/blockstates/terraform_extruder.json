@@ -3,7 +3,7 @@
   "variants": {
     "facing=down": {
       "model": "createterraform:block/terraform_extruder/casing",
-      "x": 90
+      "x": 270
     },
     "facing=east": {
       "model": "createterraform:block/terraform_extruder/casing",
@@ -18,7 +18,7 @@
     },
     "facing=up": {
       "model": "createterraform:block/terraform_extruder/casing",
-      "x": 270
+      "x": 90
     },
     "facing=west": {
       "model": "createterraform:block/terraform_extruder/casing",

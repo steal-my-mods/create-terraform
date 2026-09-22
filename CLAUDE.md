@@ -272,6 +272,18 @@ fuel bill.
   Press fifteen. A renderer without it does not fail, it quietly draws every one of them square, so
   a press comes out looking like a furnace. A rotated face keeps the shade of the direction it was
   *declared* in rather than the one it now points, which is what the game does too.
+- **The blockstate's vertical variants follow Create's Drill, not intuition.** The casing is
+  authored facing south, so each variant is the rotation carrying +Z onto the facing. Create's
+  Mechanical Drill is the same kind of block and fixes the convention: its model is authored
+  pointing **up** (`facing=up` carries no rotation) and `facing=north` is `x: 90`, so `x: 90` carries
+  +Y onto -Z, and the same rotation carries +Z onto +Y. South-authored, that makes `x: 90` the **up**
+  variant and `x: 270` the **down** one. They were the wrong way round, so an Extruder placed
+  pointing up faced down.
+- **The item model stows the barrel; the partials do not.** In the world the barrel rests at working
+  reach, with the cutting head a pixel short of the block being printed into. In an inventory slot
+  that is fifteen pixels hanging outside the cell, and everything shrinks to make room, so the icon
+  was mostly air. The item winds it back to just clear of the chuck. It is the one place the item
+  model is allowed to disagree with the partials, and it is a difference of pose rather than parts.
 - **An item's icon is drawn from its model's own `display.gui` rotation**, not from a camera chosen
   here, so a picture of an item and the item in an inventory cannot disagree. `minecraft:block/block`
   hands down `[30, 225, 0]`, which shows a block's **north and east** faces. This casing is authored
